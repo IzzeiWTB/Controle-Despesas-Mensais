@@ -6,6 +6,12 @@ Projeto de controle financeiro pessoal com duas experiencias separadas: uma demo
 
 Abra `frontend/index.html` ou publique a pasta `frontend` na Vercel. O site usa dados ficticios. Gastos adicionados ficam apenas no `localStorage` do navegador do visitante; nenhuma informacao e enviada ao Render ou ao Neon.
 
+## App pessoal instalavel
+
+O frontend tambem funciona como PWA. Abra o endereco da Vercel em um navegador compativel e use `Instalar app` (ou a opcao de instalar do navegador). Depois de instalado, ele pode ser usado como um app e continua funcionando offline.
+
+Os lancamentos ficam somente no dispositivo em que foram cadastrados. Nao existe sincronizacao entre aparelhos, backup automatico ou envio para a internet. Para proteger seus dados, use bloqueio de tela e faca exportacao/backup antes de limpar os dados do navegador.
+
 ## API privada no Render
 
 O backend roda via Docker no Render gratuito e usa PostgreSQL no Neon. O plano gratuito pode suspender o servico quando estiver inativo, entao a primeira chamada pode demorar.

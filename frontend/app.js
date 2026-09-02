@@ -1,5 +1,6 @@
 const DEMO_MODE = true;
 const API = 'https://controle-despesas-mensais.onrender.com/api';
+let deferredInstallPrompt;
 const demoTransactions = [
   { id: 'demo-1', descricao: 'Supermercado Boa Compra', categoria: 'Alimentação', data: '2026-09-01', valor: 186.4, tipo: 'SAIDA' },
   { id: 'demo-2', descricao: 'Salário mensal', categoria: 'Salário', data: '2026-09-01', valor: 6850, tipo: 'ENTRADA' },
@@ -96,4 +97,17 @@ document.querySelector('#ask-ai').onclick = async () => {
   }
   button.disabled = false;
 };
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  document.querySelector('#install-app').classList.remove('hidden');
+});
+document.querySelector('#install-app').onclick = async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  document.querySelector('#install-app').classList.add('hidden');
+};
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
 loadTransactions();

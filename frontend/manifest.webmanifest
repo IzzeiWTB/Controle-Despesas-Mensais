@@ -1,0 +1,18 @@
+{
+  "name": "Clareza | Controle financeiro",
+  "short_name": "Clareza",
+  "description": "Controle financeiro pessoal local e privado.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f2",
+  "theme_color": "#10211d",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
