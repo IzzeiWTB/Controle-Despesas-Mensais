@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clareza | Despesas pessoais</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">+</span><span>clareza</span></div>
+      <p class="eyebrow">Meu dinheiro</p>
+      <nav><a class="active" href="#visao">Visão geral</a><a href="#movimentos">Movimentações</a><a href="#limites">Limites</a><a href="#conexoes">Contas conectadas</a></nav>
+      <div class="sidebar-foot"><span class="status-dot"></span><span>Dados protegidos</span></div>
+    </aside>
+    <main class="main-content">
+      <header class="topbar"><div><p class="eyebrow">terça-feira, 02 de setembro</p><h1>Olá, Rafael.</h1></div><button class="avatar" aria-label="Perfil">RS</button></header>
+      <section id="visao" class="hero-grid">
+        <div class="balance-panel"><div class="panel-label">Saldo disponível <span>● atualizado agora</span></div><strong id="saldo">R$ 4.280,00</strong><div class="balance-meta"><span class="positive">↑ 12,4% <small>vs. mês anterior</small></span><span>Conta principal</span></div></div>
+        <div class="ai-panel"><div class="ai-orb">✦</div><div><p class="eyebrow">Clareza IA</p><h2>Seu mês está no caminho certo.</h2><p id="ai-resumo">Você gastou menos em alimentação e manteve sua reserva intacta.</p><button id="ask-ai" class="text-button">Pedir uma análise <span>→</span></button></div></div>
+      </section>
+      <section class="metrics"><article><span>Entradas</span><strong id="entradas">R$ 6.850,00</strong><small class="positive">↑ 8,2%</small></article><article><span>Despesas</span><strong id="despesas">R$ 2.570,00</strong><small>62% do planejado</small></article><article><span>Reserva do mês</span><strong>R$ 1.420,00</strong><small class="positive">Meta: R$ 1.000</small></article></section>
+      <section class="content-grid">
+        <div id="movimentos" class="section-block"><div class="section-heading"><div><p class="eyebrow">Fluxo recente</p><h2>Movimentações</h2></div><button id="new-movement" class="primary-button">+ Adicionar</button></div><div id="transactions" class="transactions"></div></div>
+        <div id="limites" class="limits-block"><div class="section-heading"><div><p class="eyebrow">Visão de hábitos</p><h2>Limites</h2></div><button class="icon-button" aria-label="Editar limites">•••</button></div><div class="limit"><div><span>Alimentação</span><b>R$ 640 <small>/ R$ 900</small></b></div><div class="progress"><i style="width:71%"></i></div><small>R$ 260 restantes</small></div><div class="limit"><div><span>Transporte</span><b>R$ 310 <small>/ R$ 500</small></b></div><div class="progress green"><i style="width:62%"></i></div><small>R$ 190 restantes</small></div><div class="limit"><div><span>Lazer</span><b>R$ 480 <small>/ R$ 450</small></b></div><div class="progress orange"><i style="width:100%"></i></div><small class="warning">Limite ultrapassado</small></div></div>
+      </section>
+      <section id="conexoes" class="connection-strip"><div class="bank-icon">◈</div><div><strong>Conecte seus bancos</strong><p>Importe suas movimentações automaticamente usando Open Finance.</p></div><button class="secondary-button">Conectar conta <span>→</span></button></section>
+    </main>
+  </div>
+  <div id="modal" class="modal hidden"><div class="modal-card"><button id="close-modal" class="close">×</button><p class="eyebrow">Nova movimentação</p><h2>Registrar gasto</h2><form id="movement-form"><label>Descrição<input name="descricao" required placeholder="Ex.: Mercado" /></label><label>Valor<input name="valor" required type="number" step="0.01" min="0.01" placeholder="0,00" /></label><label>Categoria<select name="categoria"><option>Alimentação</option><option>Transporte</option><option>Lazer</option><option>Moradia</option><option>Outros</option></select></label><button class="primary-button" type="submit">Salvar gasto</button></form></div></div>
+  <script src="app.js"></script>
+</body>
+</html>
