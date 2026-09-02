@@ -1,0 +1,17 @@
+{
+  "name": "clareza-financeiro-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "sync-web": "node scripts/sync-web.js",
+    "build": "npm run sync-web && cap sync android",
+    "open:android": "npm run build && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

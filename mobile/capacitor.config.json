@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.clareza.financeiro",
+  "appName": "Clareza Financeiro",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
