@@ -32,6 +32,19 @@ public class MovimentacaoController {
         return repository.save(movimentacao);
     }
 
+    @PutMapping("/{id}")
+    public Movimentacao atualizar(@PathVariable UUID id, @Valid @RequestBody Movimentacao dados) {
+        Movimentacao movimentacao = repository.findById(id).orElseThrow();
+        movimentacao.setDescricao(dados.getDescricao());
+        movimentacao.setValor(dados.getValor());
+        movimentacao.setData(dados.getData());
+        movimentacao.setCategoria(dados.getCategoria());
+        movimentacao.setTipo(dados.getTipo());
+        movimentacao.setConta(dados.getConta());
+        movimentacao.setRecorrente(dados.isRecorrente());
+        return repository.save(movimentacao);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void excluir(@PathVariable UUID id) { repository.deleteById(id); }

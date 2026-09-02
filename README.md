@@ -51,3 +51,15 @@ Sem `APP_API_KEY`, a API fica liberada apenas para facilitar o desenvolvimento l
 O endpoint de analise e um placeholder deterministico para o MVP. O fluxo recomendado no n8n e: Telegram/WhatsApp -> webhook -> API com `X-API-Key` -> regras financeiras -> modelo de linguagem -> resposta no mesmo canal. Nunca envie senhas bancarias, tokens ou credenciais ao modelo.
 
 A conexao bancaria real deve usar Open Finance por um provedor autorizado, com consentimento do usuario e tokens protegidos no backend.
+
+## App privado real
+
+A pasta `private-app` e a interface para uso pessoal. Ela nao deve ser publicada na Vercel como site publico. Para usar, abra essa pasta por um servidor HTTP local, informe sua `APP_API_KEY` na tela e conecte ao backend do Render. Os dados reais continuam no Neon; a chave fica apenas na sessao do navegador.
+
+Exemplo com Node.js:
+
+```powershell
+npx serve private-app
+```
+
+Abra o endereco informado pelo comando. A vitrine continua em `frontend`; o app privado real fica em `private-app`.

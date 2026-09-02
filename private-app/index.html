@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clareza | Meu controle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header><div><span class="tag">CONTROLE PRIVADO</span><h1>Meu dinheiro.</h1><p>Dados sincronizados com sua API no Render.</p></div><button id="logout" class="quiet hidden">Sair</button></header>
+    <section id="access" class="access"><span class="lock">⌁</span><h2>Entrar no seu controle</h2><p>Use a APP_API_KEY configurada no Render. Ela fica somente neste dispositivo.</p><form id="access-form"><input id="api-key" type="password" placeholder="APP_API_KEY" autocomplete="off" required><button>Conectar</button></form><small id="access-error"></small></section>
+    <section id="dashboard" class="hidden"><div class="cards"><article><span>Saldo</span><strong id="balance">R$ 0,00</strong></article><article><span>Entradas</span><strong id="entries">R$ 0,00</strong></article><article><span>Despesas</span><strong id="expenses">R$ 0,00</strong></article></div><div class="toolbar"><h2>Movimentações</h2><button id="add">+ Novo lançamento</button></div><div id="list" class="list"></div></section>
+  </main>
+  <dialog id="movement-dialog"><form id="movement-form" method="dialog"><button type="button" id="close" class="close">×</button><span class="tag">LANÇAMENTO</span><h2 id="form-title">Novo lançamento</h2><input name="descricao" placeholder="Descrição" required><div class="row"><input name="valor" type="number" min="0.01" step="0.01" placeholder="Valor" required><input name="data" type="date" required></div><select name="categoria"><option>Alimentação</option><option>Transporte</option><option>Lazer</option><option>Moradia</option><option>Salário</option><option>Outros</option></select><select name="tipo"><option value="SAIDA">Despesa</option><option value="ENTRADA">Entrada</option></select><button>Salvar</button></form></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
