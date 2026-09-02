@@ -1,4 +1,5 @@
 const API = 'https://controle-despesas-mensais.onrender.com/api';
+let deferredInstallPrompt;
 let apiKey = sessionStorage.getItem('clareza-api-key') || '';
 let movements = [];
 let editingId = null;
@@ -36,3 +37,5 @@ el('#close').onclick = () => el('#movement-dialog').close();
 el('#movement-form').onsubmit = async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.target)); const payload = { ...data, valor: Number(data.valor), tipo: data.tipo, recorrente: false }; try { movements = editingId ? await request(`/movimentacoes/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) }).then(() => request('/movimentacoes')) : await request('/movimentacoes', { method: 'POST', body: JSON.stringify(payload) }); el('#movement-dialog').close(); editingId = null; render(); } catch (error) { alert(error.message); } };
 el('#list').onclick = async event => { const edit = event.target.closest('[data-edit]'); const remove = event.target.closest('[data-delete]'); if (edit) openForm(movements.find(item => item.id === edit.dataset.edit)); if (remove && confirm('Excluir este lançamento?')) { await request(`/movimentacoes/${remove.dataset.delete}`, { method: 'DELETE' }); movements = movements.filter(item => item.id !== remove.dataset.delete); render(); } };
 if (apiKey) { el('#api-key').value = apiKey; connect(); }
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferredInstallPrompt = event; });
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));

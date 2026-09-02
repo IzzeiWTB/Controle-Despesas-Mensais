@@ -63,3 +63,5 @@ npx serve private-app
 ```
 
 Abra o endereco informado pelo comando. A vitrine continua em `frontend`; o app privado real fica em `private-app`.
+
+Para instalar no celular, publique `private-app` como um segundo projeto na Vercel usando `private-app` como Root Directory. Abra o endereco no celular e use o menu do navegador: `Adicionar a tela inicial` no Android ou `Adicionar a Tela de Inicio` no iPhone. O endereco fica protegido pela `APP_API_KEY`; sem ela, seus dados nao sao carregados.
