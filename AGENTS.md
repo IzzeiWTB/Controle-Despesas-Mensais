@@ -4,7 +4,27 @@
 
 Aplicativo pessoal de controle financeiro chamado **Clareza**. A experiência deve ser simples, acolhedora e orientada a decisões: mostrar o que importa no mês, facilitar o registro de gastos e dar contexto sobre orçamento e hábitos.
 
-Referências de produto: Piere/Pierre e MultiCap, somente como inspiração de princípios (clareza, orçamento, recorrência, privacidade e visão consolidada). Nunca copiar marca, textos, identidade visual, telas ou código desses produtos.
+Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCap. Piere americano é outro produto e não deve ser confundido com Pierre. Usar referências públicas como inspiração, preservando a identidade do Clareza.
+
+## Regra permanente de continuidade
+
+- Antes de alterar o projeto, ler este arquivo; atualizar decisões, estado verificado e pendências durante cada entrega. Pedido explícito do usuário em 16/10/2026.
+- Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
+- Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
+
+## Entrega em andamento — 16/10/2026
+
+Objetivo: acessar a PWA pelo próprio endereço do Render, entrar com a chave e operar lançamentos reais, sem servidor separado no computador. Plano e critérios em `docs/funcionalidade.md`.
+
+Problemas corrigidos: preflight CORS, respostas 400/404, validação de tipo/valor, proteção sem chave configurada, interface na raiz, edição no celular e limpeza de valores obsoletos quando falha a atualização. Recorrência agora é identificada honestamente como marcação, sem automação.
+
+Validação local: integração real com H2 em memória e navegador Chrome headless. Testes em `backend/src/test` e `tests/`. Fluxo completo de login, CRUD, recarga, filtros, limites, privacidade e CSV verificado; falha de rede e ausência de cache da API cobertas.
+
+Deploy: `node scripts/sync-app.mjs` gera cópias de `private-app/` em `backend/src/main/resources/static/` (versionada) e `mobile/www/` (ignorada). Não editar essas cópias diretamente. A versão hospedada resolve `/api` na própria origem; a versão Android aponta para o Render. Preservar Root Directory `backend` no Render.
+
+Pendente: verificar o novo deploy em produção. Não afirmar login de produção validado sem chave nova inserida pelo usuário. Limites continuam locais; contas são rótulos, recorrência é marcação; metas, investimentos e Open Finance não existem ainda.
+
+Credenciais expostas em captura anterior precisam ser rotacionadas pelo titular no Render/Neon. Não há confirmação dessa rotação; não reutilizar os valores da captura em testes.
 
 ## Estrutura
 
@@ -21,6 +41,8 @@ Referências de produto: Piere/Pierre e MultiCap, somente como inspiração de p
 - A chave `APP_API_KEY` é segredo: nunca registrar, exibir, inserir no código, no README ou em screenshots.
 - Se uma chave ou senha aparecer em captura de tela, terminal, commit ou conversa, trate-a como comprometida e instrua a rotação imediata no Render/Neon.
 - O app privado guarda a chave somente em `sessionStorage`; não migrar para `localStorage`.
+- API sem `APP_API_KEY` configurada retorna 503, inclusive no desenvolvimento. Nunca liberar dados quando o segredo está ausente.
+- Service worker só armazena arquivos da interface. Respostas financeiras usam `Cache-Control: no-store`.
 - `frontend/` deve permanecer uma demo sem chamadas autenticadas à API de produção.
 - Não anunciar integração Open Finance, IA externa, criptografia ou sincronização de dados que não esteja realmente implementada.
 
@@ -37,6 +59,8 @@ mvn spring-boot:run
 ```
 
 Sem variáveis de banco, a API usa H2 em `backend/data/`.
+
+Para testes: `mvn -f backend/pom.xml clean package`, `npm ci`, `npm run sync`, `npm run check`, `npm run test:e2e`. O teste de navegador usa a porta 18765, chave fictícia e banco em memória, encerrados no final. Não usar Neon ou credenciais reais em testes.
 
 ### App privado
 
@@ -70,4 +94,4 @@ npm run build
 2. Executar `git diff --check`.
 3. Executar os testes Maven quando o Maven estiver disponível.
 4. Sincronizar `mobile/` se o app privado mudou.
-5. Fazer deploy do backend e da interface privada como serviços separados quando houver uma hospedagem permanente para a PWA.
+5. Sincronizar os arquivos da PWA para o backend e verificar que `/` serve a tela de acesso. Hospedagem conjunta simplifica acesso e evita CORS em produção.

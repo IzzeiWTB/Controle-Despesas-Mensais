@@ -1,67 +1,103 @@
-# Despesas Pessoais
+# Clareza — Controle de Despesas Mensais
 
-Projeto de controle financeiro pessoal com duas experiencias separadas: uma demonstracao publica, sem banco de dados, e uma API privada para uso pessoal.
+Controle financeiro pessoal com API Spring Boot, PostgreSQL no Neon e interface instalável. A aplicação é de um único proprietário: quem conhece a chave de acesso tem acesso a todos os lançamentos.
 
-## Teste publico
+## Usar no Render
 
-Abra `frontend/index.html` ou publique a pasta `frontend` na Vercel. O site usa dados ficticios. Gastos adicionados ficam apenas no `localStorage` do navegador do visitante; nenhuma informacao e enviada ao Render ou ao Neon.
+Após o deploy desta versão, abra **https://controle-despesas-mensais.onrender.com/** e informe sua `APP_API_KEY` no campo Chave de acesso. A interface usa a API do mesmo endereço; não é necessário executar Java, Node ou Maven no computador para usar o app hospedado.
 
-## App pessoal instalavel
+O primeiro acesso pode demorar enquanto o serviço inicia. A interface informa carregamento, erro de acesso e falhas de conexão. A tela é pública, mas os dados exigem a chave.
 
-O frontend tambem funciona como PWA. Abra o endereco da Vercel em um navegador compativel e use `Instalar app` (ou a opcao de instalar do navegador). Depois de instalado, ele pode ser usado como um app e continua funcionando offline.
+Não compartilhe capturas de tela com valores de variáveis de ambiente. Se uma credencial foi exposta, troque a chave no Render e a senha do banco no Neon; atualize no Render tanto `SPRING_DATASOURCE_PASSWORD` quanto qualquer senha incorporada à URL JDBC. Aguarde o redeploy e use a chave nova na tela de acesso. Não registre segredos no Git.
 
-Os lancamentos ficam somente no dispositivo em que foram cadastrados. Nao existe sincronizacao entre aparelhos, backup automatico ou envio para a internet. Para proteger seus dados, use bloqueio de tela e faca exportacao/backup antes de limpar os dados do navegador.
+## Recursos implementados
 
-## API privada no Render
+- Consulta por mês, entradas, despesas e saldo dos lançamentos registrados (não é o saldo bancário real).
+- Inclusão, edição, exclusão e busca por descrição, categoria e conta.
+- Campo de conta/cartão como identificação manual, sem integração bancária.
+- Marcação de recorrência: identifica registros recorrentes, **sem criar automaticamente os próximos meses**.
+- Limites por categoria no navegador, separados pelo endereço da API e aplicados a todos os meses; não sincronizam entre dispositivos.
+- Resumo calculado por regras, modo privacidade e exportação CSV do mês.
+- Interface responsiva e PWA. Precisa de internet para consultar e salvar dados; o cache contém somente a interface.
 
-O backend roda via Docker no Render gratuito e usa PostgreSQL no Neon. O plano gratuito pode suspender o servico quando estiver inativo, entao a primeira chamada pode demorar.
+## Estrutura e publicação
 
-Variaveis obrigatorias no Render:
+- `private-app/`: fonte da interface principal.
+- `backend/`: API e cópia gerada da interface em `src/main/resources/static/`.
+- `frontend/`: demonstração independente com dados fictícios locais. Não usa a API privada.
+- `mobile/`: projeto Android Capacitor.
+- `AGENTS.md`: contexto, regras permanentes e estado verificado do projeto.
+
+Depois de alterar a interface:
+
+```powershell
+npm run sync
+npm run check
+```
+
+Versione a cópia gerada em `backend/src/main/resources/static/` junto com a fonte. Isso preserva a configuração existente do Render: Root Directory `backend`, Dockerfile `Dockerfile`, branch `main`. Não é preciso criar outro serviço de hospedagem. `npm run check` detecta cópias desatualizadas.
+
+Variáveis de produção (preencher diretamente no Render):
 
 ```text
 SPRING_DATASOURCE_URL=jdbc:postgresql://HOST/neondb?sslmode=require
-SPRING_DATASOURCE_USERNAME=neondb_owner
-SPRING_DATASOURCE_PASSWORD=senha-do-Neon
+SPRING_DATASOURCE_USERNAME=usuario-do-banco
+SPRING_DATASOURCE_PASSWORD=<senha>
 SPRING_DATASOURCE_DRIVER=org.postgresql.Driver
-APP_API_KEY=uma-chave-longa-e-secreta
+APP_API_KEY=<chave-longa-aleatoria>
 ```
 
-A API exige `X-API-Key` quando `APP_API_KEY` esta configurada. Guarde essa chave somente no n8n ou em um cliente privado; nunca coloque no frontend publico.
+Sem `APP_API_KEY`, a API recusa operações com HTTP 503. Sem chave válida na requisição, retorna 401. O app mantém a chave somente na sessão do navegador.
 
-Endpoints:
+## Desenvolvimento e testes
 
-- `GET /api/movimentacoes?inicio=2026-09-01&fim=2026-09-30`
-- `POST /api/movimentacoes`
-- `DELETE /api/movimentacoes/{id}`
-- `POST /api/ia/analisar` com `{ "mensagem": "Posso gastar 80 reais hoje?" }`
-
-## Desenvolvimento local
-
-Requisitos: Java 21 e Maven 3.9+.
+Requisitos: Java 25, Maven 3.9+ e Node.js. Nesta máquina, o Java foi encontrado em `C:/Program Files/Java/jdk-25.0.4`; o Maven preparado durante o desenvolvimento fica em `%LOCALAPPDATA%/ClarezaTools/apache-maven-3.9.11`.
 
 ```powershell
+npm ci
+npm run sync
+$env:APP_API_KEY="chave-apenas-para-desenvolvimento"
 cd backend
 mvn spring-boot:run
 ```
 
-Sem `APP_API_KEY`, a API fica liberada apenas para facilitar o desenvolvimento local. Em producao, sempre configure uma chave.
-
-## Integracao com IA
-
-O endpoint de analise e um placeholder deterministico para o MVP. O fluxo recomendado no n8n e: Telegram/WhatsApp -> webhook -> API com `X-API-Key` -> regras financeiras -> modelo de linguagem -> resposta no mesmo canal. Nunca envie senhas bancarias, tokens ou credenciais ao modelo.
-
-A conexao bancaria real deve usar Open Finance por um provedor autorizado, com consentimento do usuario e tokens protegidos no backend.
-
-## App privado real
-
-A pasta `private-app` e a interface para uso pessoal. Ela nao deve ser publicada na Vercel como site publico. Para usar, abra essa pasta por um servidor HTTP local, informe sua `APP_API_KEY` na tela e conecte ao backend do Render. Os dados reais continuam no Neon; a chave fica apenas na sessao do navegador.
-
-Exemplo com Node.js:
+Abra `http://localhost:8080`. Sem configuração externa de banco, usa H2 em `backend/data/`. Não utilize dados pessoais nos testes.
 
 ```powershell
-npx serve private-app
+# A partir da raiz
+mvn -f backend/pom.xml clean package
+npm run check
+npm run test:e2e
 ```
 
-Abra o endereco informado pelo comando. A vitrine continua em `frontend`; o app privado real fica em `private-app`.
+Os testes de integração usam H2 em memória. Os testes de navegador abrem Chrome headless e iniciam uma instância própria na porta 18765, com banco em memória e chave fictícia. Requerem Google Chrome instalado e o JAR gerado pelo Maven. Não acessam o banco de produção. A instância é encerrada ao terminar.
 
-Para instalar no celular, publique `private-app` como um segundo projeto na Vercel usando `private-app` como Root Directory. Abra o endereco no celular e use o menu do navegador: `Adicionar a tela inicial` no Android ou `Adicionar a Tela de Inicio` no iPhone. O endereco fica protegido pela `APP_API_KEY`; sem ela, seus dados nao sao carregados.
+Como alternativa para desenvolver somente a interface, execute `npx serve private-app`, abra Configurações de conexão e informe a URL da API. APIs remotas exigem HTTPS; HTTP é aceito apenas para localhost.
+
+## Android e PWA
+
+O `npm run sync` da raiz copia a interface para `mobile/www`. Para gerar/abrir o projeto Android:
+
+```powershell
+cd mobile
+npm ci
+npm run open:android
+```
+
+Requer Android Studio e SDK Android. O app mobile usa a URL do Render por padrão. Para instalar como PWA, abra o endereço do Render no navegador do celular e use a opção de instalar/adicionar à tela inicial quando disponível.
+
+## API
+
+Todas as operações usam o cabeçalho `X-API-Key`:
+
+- `GET /api/movimentacoes?inicio=2026-10-01&fim=2026-10-31`
+- `POST /api/movimentacoes`
+- `PUT /api/movimentacoes/{id}`
+- `DELETE /api/movimentacoes/{id}`
+- `POST /api/ia/analisar`: endpoint legado com regras determinísticas, sem modelo de IA externo.
+
+Dados de lançamento: `descricao`, `valor` positivo com até duas casas, `data` (YYYY-MM-DD), `categoria`, `tipo` (`ENTRADA` ou `SAIDA`), `conta` opcional e `recorrente` booleano. API não guarda resultados em cache HTTP; registros inexistentes retornam 404 e entradas inválidas retornam 400.
+
+## Pendências de produto
+
+Automação de recorrências, orçamento sincronizado, contas com saldos reais, metas, investimentos, login por usuário e Open Finance ainda não foram implementados. A integração bancária requer um provedor, consentimento e proteção de tokens no backend.

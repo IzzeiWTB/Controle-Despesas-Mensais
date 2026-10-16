@@ -13,7 +13,7 @@
     <name>Despesas Pessoais</name>
     <description>Controle financeiro pessoal com análise inteligente</description>
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
     </properties>
     <dependencies>
         <dependency>

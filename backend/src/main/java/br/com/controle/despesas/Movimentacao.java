@@ -8,6 +8,9 @@ import jakarta.persistence.PrePersist;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -19,21 +22,26 @@ public class Movimentacao {
     private UUID id;
 
     @NotBlank
+    @Size(max = 100)
     private String descricao;
 
     @NotNull
     @DecimalMin(value = "0.01")
+    @Digits(integer = 12, fraction = 2)
     private BigDecimal valor;
 
     @NotNull
     private LocalDate data;
 
     @NotBlank
+    @Size(max = 60)
     private String categoria;
 
     @NotBlank
+    @Pattern(regexp = "ENTRADA|SAIDA")
     private String tipo;
 
+    @Size(max = 60)
     private String conta;
     private boolean recorrente;
 

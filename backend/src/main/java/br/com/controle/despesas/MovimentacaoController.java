@@ -3,6 +3,7 @@ package br.com.controle.despesas;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -21,9 +22,13 @@ public class MovimentacaoController {
     public List<Movimentacao> listar(@RequestParam(required = false) LocalDate inicio,
                                      @RequestParam(required = false) LocalDate fim) {
         LocalDate hoje = LocalDate.now();
+        LocalDate inicioPeriodo = inicio != null ? inicio : hoje.withDayOfMonth(1);
+        LocalDate fimPeriodo = fim != null ? fim : hoje.withDayOfMonth(hoje.lengthOfMonth());
+        if (fimPeriodo.isBefore(inicioPeriodo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Periodo invalido");
+        }
         return repository.findByDataBetweenOrderByDataDesc(
-                inicio != null ? inicio : hoje.withDayOfMonth(1),
-                fim != null ? fim : hoje.withDayOfMonth(hoje.lengthOfMonth()));
+                inicioPeriodo, fimPeriodo);
     }
 
     @PostMapping
@@ -34,7 +39,8 @@ public class MovimentacaoController {
 
     @PutMapping("/{id}")
     public Movimentacao atualizar(@PathVariable UUID id, @Valid @RequestBody Movimentacao dados) {
-        Movimentacao movimentacao = repository.findById(id).orElseThrow();
+        Movimentacao movimentacao = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lancamento nao encontrado"));
         movimentacao.setDescricao(dados.getDescricao());
         movimentacao.setValor(dados.getValor());
         movimentacao.setData(dados.getData());
@@ -47,5 +53,9 @@ public class MovimentacaoController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void excluir(@PathVariable UUID id) { repository.deleteById(id); }
+    public void excluir(@PathVariable UUID id) {
+        Movimentacao movimentacao = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lancamento nao encontrado"));
+        repository.delete(movimentacao);
+    }
 }

@@ -1,0 +1,13 @@
+{
+  "name": "clareza-financeiro",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "sync": "node scripts/sync-app.mjs",
+    "check": "node --check private-app/app.js && node --check private-app/sw.js && node scripts/sync-app.mjs --check",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
+  }
+}

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 @Component
 public class ApiKeyFilter extends OncePerRequestFilter {
@@ -18,11 +20,25 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        if (!request.getRequestURI().startsWith("/api/") || configuredApiKey.isBlank()
-                || configuredApiKey.equals(request.getHeader("X-API-Key"))) {
+        if (!request.getRequestURI().startsWith("/api/")) {
             filterChain.doFilter(request, response);
             return;
         }
-        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "API key invalida");
+        response.setHeader("Cache-Control", "no-store");
+        if ("OPTIONS".equals(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        if (configuredApiKey.isBlank()) {
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Configure APP_API_KEY no servidor");
+            return;
+        }
+        String provided = request.getHeader("X-API-Key");
+        if (provided != null && MessageDigest.isEqual(configuredApiKey.getBytes(StandardCharsets.UTF_8),
+                provided.getBytes(StandardCharsets.UTF_8))) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Chave invalida");
     }
 }
