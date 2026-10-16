@@ -1,11 +1,11 @@
 {
   "name": "Clareza | Meu controle financeiro",
-  "short_name": "Meu Clareza",
+  "short_name": "Clareza",
   "description": "Controle financeiro pessoal conectado à sua API privada.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4f6f1",
-  "theme_color": "#15372d",
+  "background_color": "#f6f5ef",
+  "theme_color": "#102b24",
   "lang": "pt-BR",
   "icons": [{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
 }

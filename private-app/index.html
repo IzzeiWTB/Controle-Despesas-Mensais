@@ -3,18 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Clareza | Meu controle</title>
-  <meta name="theme-color" content="#15372d">
+  <meta name="theme-color" content="#102b24">
+  <title>Clareza — seu dinheiro, com calma</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app">
-    <header><div><span class="tag">CONTROLE PRIVADO</span><h1>Meu dinheiro.</h1><p>Dados sincronizados com sua API no Render.</p></div><button id="logout" class="quiet hidden">Sair</button></header>
-    <section id="access" class="access"><span class="lock">⌁</span><h2>Entrar no seu controle</h2><p>Use a APP_API_KEY configurada no Render. Ela fica somente neste dispositivo.</p><form id="access-form"><input id="api-key" type="password" placeholder="APP_API_KEY" autocomplete="off" required><button>Conectar</button></form><small id="access-error"></small></section>
-    <section id="dashboard" class="hidden"><div class="cards"><article><span>Saldo</span><strong id="balance">R$ 0,00</strong></article><article><span>Entradas</span><strong id="entries">R$ 0,00</strong></article><article><span>Despesas</span><strong id="expenses">R$ 0,00</strong></article></div><div class="toolbar"><h2>Movimentações</h2><button id="add">+ Novo lançamento</button></div><div id="list" class="list"></div></section>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#inicio" aria-label="Clareza, início"><span>c</span>clareza</a>
+      <div class="top-actions"><button id="privacy" class="ghost hidden" aria-pressed="false">Ocultar valores</button><button id="install" class="ghost hidden">Instalar app</button><button id="logout" class="avatar hidden" aria-label="Sair da conta">S</button></div>
+    </header>
+    <section id="access" class="access-card">
+      <p class="kicker">CONTROLE PRIVADO</p><h1>Seu dinheiro.<br><em>Do seu jeito.</em></h1>
+      <p class="lead">Conecte sua API privada para consultar e organizar seus lançamentos com segurança.</p>
+      <form id="access-form">
+        <label>Endereço da API<input id="api-url" type="url" inputmode="url" required></label>
+        <label>Chave de acesso<input id="api-key" type="password" autocomplete="off" placeholder="APP_API_KEY" required></label>
+        <button class="button" type="submit">Entrar no meu painel <span>→</span></button>
+      </form>
+      <p id="access-error" class="form-error" role="alert"></p><small>A chave fica somente nesta sessão neste dispositivo.</small>
+    </section>
+    <section id="dashboard" class="hidden">
+      <div class="welcome-row"><div><p class="kicker">VISÃO DO MÊS</p><h1>Olá, <span id="greeting-name">você</span>.</h1><p id="month-description" class="muted"></p></div><label class="month-picker">Período<input id="period" type="month"></label></div>
+      <section class="balance-card"><div><p>Disponível neste mês</p><strong id="balance">R$ 0,00</strong><p id="balance-note" class="balance-note">Entradas menos despesas</p></div><div class="balance-flower" aria-hidden="true">✦</div></section>
+      <section class="summary-grid" aria-label="Resumo financeiro"><article><span class="summary-icon income">↓</span><div><small>Entradas</small><strong id="entries">R$ 0,00</strong></div></article><article><span class="summary-icon expense">↑</span><div><small>Despesas</small><strong id="expenses">R$ 0,00</strong></div></article><article><span class="summary-icon save">◌</span><div><small>Taxa de poupança</small><strong id="saving-rate">—</strong></div></article></section>
+      <section class="insight-card"><div class="insight-mark">✦</div><div><p class="kicker">CLAREZA EM FOCO</p><h2 id="insight-title">Seu resumo está pronto.</h2><p id="insight-text">Inclua seus lançamentos para receber uma leitura do mês.</p></div></section>
+      <section class="content-grid">
+        <section class="transactions-section"><div class="section-title"><div><p class="kicker">SEUS REGISTROS</p><h2>Movimentações</h2></div><div class="section-actions"><button id="export" class="text-action">Exportar</button><button id="add" class="button compact">+ Adicionar</button></div></div><div class="filter-bar"><input id="search" type="search" placeholder="Buscar lançamento" aria-label="Buscar lançamento"><select id="type-filter" aria-label="Filtrar por tipo"><option value="TODOS">Todos</option><option value="ENTRADA">Entradas</option><option value="SAIDA">Despesas</option></select></div><div id="list" class="transaction-list"></div></section>
+        <aside class="budgets-section"><div class="section-title"><div><p class="kicker">PLANEJAMENTO</p><h2>Por categoria</h2></div><button id="edit-budgets" class="text-action">Editar</button></div><div id="budget-list"></div></aside>
+      </section>
+    </section>
   </main>
-  <dialog id="movement-dialog"><form id="movement-form" method="dialog"><button type="button" id="close" class="close">×</button><span class="tag">LANÇAMENTO</span><h2 id="form-title">Novo lançamento</h2><input name="descricao" placeholder="Descrição" required><div class="row"><input name="valor" type="number" min="0.01" step="0.01" placeholder="Valor" required><input name="data" type="date" required></div><select name="categoria"><option>Alimentação</option><option>Transporte</option><option>Lazer</option><option>Moradia</option><option>Salário</option><option>Outros</option></select><select name="tipo"><option value="SAIDA">Despesa</option><option value="ENTRADA">Entrada</option></select><button>Salvar</button></form></dialog>
+  <dialog id="movement-dialog"><form id="movement-form"><button type="button" id="close" class="close" aria-label="Fechar">×</button><p class="kicker">LANÇAMENTO</p><h2 id="form-title">Novo lançamento</h2><label>Descrição<input name="descricao" required maxlength="100" placeholder="Ex.: Mercado"></label><div class="form-row"><label>Valor<input name="valor" type="number" min="0.01" step="0.01" required placeholder="0,00"></label><label>Data<input name="data" type="date" required></label></div><div class="form-row"><label>Categoria<select name="categoria"><option>Alimentação</option><option>Transporte</option><option>Moradia</option><option>Saúde</option><option>Lazer</option><option>Assinaturas</option><option>Salário</option><option>Outros</option></select></label><label>Tipo<select name="tipo"><option value="SAIDA">Despesa</option><option value="ENTRADA">Entrada</option></select></label></div><label>Conta ou cartão <input name="conta" maxlength="60" placeholder="Ex.: Nubank"></label><label class="check-row"><input name="recorrente" type="checkbox"> Repetir este lançamento mensalmente</label><button class="button" type="submit">Salvar lançamento</button><p id="form-error" class="form-error" role="alert"></p></form></dialog>
+  <dialog id="budget-dialog"><form id="budget-form"><button type="button" id="close-budgets" class="close" aria-label="Fechar">×</button><p class="kicker">PLANEJAMENTO</p><h2>Limites mensais</h2><p class="muted">Os limites ficam neste dispositivo e ajudam a acompanhar seus gastos.</p><div id="budget-fields" class="budget-fields"></div><button class="button" type="submit">Salvar limites</button></form></dialog>
   <script src="app.js"></script>
 </body>
 </html>
