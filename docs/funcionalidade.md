@@ -26,3 +26,12 @@ Abrir a URL do Render, autenticar e consultar/criar/editar/excluir lançamentos 
 ## Fora desta entrega
 
 Open Finance, IA externa, metas/investimentos, automação de séries recorrentes e autenticação multiusuário. O app continua sendo um controle pessoal de um único proprietário.
+
+## Resultado verificado — 16/10/2026
+
+- Sete testes de backend e quatro testes de navegador passaram com dados fictícios em H2 isolado.
+- Layout móvel de 375 px inspecionado; edição está disponível e não há rolagem horizontal.
+- Commit funcional `43f85dd` publicado na main e entregue pelo Render.
+- Página pública retorna 200, mostra login e usa API da mesma origem. JavaScript publicado coincide com o testado.
+- API sem chave retorna 401 com `Cache-Control: no-store`; preflight retorna 200.
+- Não foram lidos ou alterados lançamentos de produção. A chave nova precisa ser inserida pelo titular para validar sua sessão real.

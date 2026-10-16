@@ -22,7 +22,11 @@ Validação local: integração real com H2 em memória e navegador Chrome headl
 
 Deploy: `node scripts/sync-app.mjs` gera cópias de `private-app/` em `backend/src/main/resources/static/` (versionada) e `mobile/www/` (ignorada). Não editar essas cópias diretamente. A versão hospedada resolve `/api` na própria origem; a versão Android aponta para o Render. Preservar Root Directory `backend` no Render.
 
-Pendente: verificar o novo deploy em produção. Não afirmar login de produção validado sem chave nova inserida pelo usuário. Limites continuam locais; contas são rótulos, recorrência é marcação; metas, investimentos e Open Finance não existem ainda.
+Produção verificada em 16/10/2026, 20h52 (America/Sao_Paulo): commit funcional `43f85dd` publicado na main e no Render. `/` retorna 200 e mostra login; `/app.js` é idêntico ao arquivo testado; API sem chave retorna 401 com `no-store`; preflight OPTIONS retorna 200. Navegador Chrome abriu a tela pública em largura de celular sem erros JavaScript. Total local: sete testes de backend e quatro de navegador aprovados.
+
+Pendente: login com a chave de produção nova deve ser feito pelo titular na interface. Não reutilizar credenciais expostas. Limites continuam locais; contas são rótulos, recorrência é marcação; metas, investimentos e Open Finance não existem ainda.
+
+Git: há mais de uma conta no Git Credential Manager deste computador. Para este repositório, usar `git -c credential.username=IzzeiWTB push origin HEAD:main` evita o seletor de conta. Não imprimir credenciais. Alterações apenas documentais podem usar `[skip render]` no commit para não disparar outro build.
 
 Credenciais expostas em captura anterior precisam ser rotacionadas pelo titular no Render/Neon. Não há confirmação dessa rotação; não reutilizar os valores da captura em testes.
 
