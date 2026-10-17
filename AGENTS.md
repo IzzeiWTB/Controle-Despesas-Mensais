@@ -12,15 +12,19 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
-## Android em andamento — 17/10/2026
+## Entrega Android — 17/10/2026
 
-Pedido atual: entregar APK instalável do Clareza, conectado ao Render, sem servidor no computador. Plano e critérios em `docs/android.md`. A base Capacitor 7 existe, mas ainda não havia APK validado. Preparar JDK 21 separado do Java 25 do backend e Android SDK local; não alterar o Java global. Validar exportação nativa, navegação, segurança e regressões web antes da entrega. Não confundir testes no navegador com execução em um aparelho Android.
+Pedido atendido nesta etapa: APK de teste instalável do Clareza, configurado para o Render, sem servidor no computador. Plano, instalação e critérios em `docs/android.md`. JDK 21 e SDK Android preparados separadamente do Java 25 do backend, sem alterar o Java global. Não confundir testes no emulador com execução no telefone do titular.
 
 Implementado nesta etapa: plugin Java `ClarezaFiles` exporta CSV pelo seletor do Android, sem armazenamento intermediário ou permissão ampla; Voltar fecha formulários; backup e HTTP desativados; ícone/splash próprios; service worker desligado no contêiner nativo; logs do Capacitor desativados. Erros de autenticação da API agora incluem CORS para o Android conseguir distinguir chave inválida de falta de conexão.
 
 Verificado: sete testes backend, seis de navegador e quatro unitários Android aprovados; cenário completo no emulador Android 15/API 35 com APK instalado passou por login, CRUD com H2 descartável, recarga, botão Voltar, cancelamento do seletor e CSV efetivamente gravado/lido. Teste em `tests-android/`, configuração `playwright.android.config.cjs`; exige AVD dedicado `Clareza_API_35`, não telefone pessoal. Requisições do APK são encaminhadas ao backend local por automação; isso não confirma login de produção.
 
 Gradle `assembleDebug testDebugUnitTest lintDebug` e assinatura v1/v2 fazem parte de `npm run apk` em `mobile/`. APK em `mobile/artifacts/Clareza-1.0-debug.apk` (ignorado pelo Git). Ferramentas em `%LOCALAPPDATA%/ClarezaTools` e SDK em `%LOCALAPPDATA%/Android/Sdk`. A assinatura é de depuração, não de Play Store. HTTP local não é habilitado no APK. JavaScript usa AbortController com timer para funcionar também em WebViews sem `AbortSignal.timeout`; regressão coberta nos testes.
+
+Código funcional publicado na main em `9225c63`. Render verificado em 17/10/2026 após deploy: `/app.js` retorna 200 e corresponde exatamente à fonte; API sem chave retorna 401 com `Access-Control-Allow-Origin: *` para `Origin: https://localhost` e `Cache-Control: no-store`. APK final SHA-256 `74D96150010D337DB3AC1FABAAEB4B387CEF1081DDA35B0F152CD54E0D1C5EA8`, aproximadamente 4 MB. Lint final: zero erros e 18 avisos herdados de dependências/assets. Emulador e servidores de teste encerrados após validação.
+
+Próximo passo do titular: transferir/instalar APK no telefone, rotacionar credenciais expostas e entrar com a nova `APP_API_KEY`. Não houve login em produção nem teste em telefone físico. Não há publicação em loja, assinatura de produção ou atualização automática do APK.
 
 ## Entrega web — 16/10/2026
 

@@ -76,15 +76,17 @@ Como alternativa para desenvolver somente a interface, execute `npx serve privat
 
 ## Android e PWA
 
-O `npm run sync` da raiz copia a interface para `mobile/www`. Para gerar/abrir o projeto Android:
+O `npm run sync` da raiz copia a interface para `mobile/www`. Para gerar o APK de teste no Windows:
 
 ```powershell
 cd mobile
 npm ci
-npm run open:android
+npm run apk
 ```
 
-Requer Android Studio e SDK Android. O app mobile usa a URL do Render por padrão. Para instalar como PWA, abra o endereço do Render no navegador do celular e use a opção de instalar/adicionar à tela inicial quando disponível.
+Requer JDK 21 e SDK Android 35, já preparados neste computador. O APK fica em `mobile/artifacts/Clareza-1.0-debug.apk`; ele usa a URL do Render por padrão, sem chave embutida. Consulte [o guia Android](docs/android.md) para instalar, compilar novamente e reproduzir os testes no emulador. Android Studio é opcional para esse comando; `npm run open:android` abre o projeto nele.
+
+Para instalar como PWA, abra o endereço do Render no navegador do celular e use a opção de instalar/adicionar à tela inicial quando disponível.
 
 ## API
 
