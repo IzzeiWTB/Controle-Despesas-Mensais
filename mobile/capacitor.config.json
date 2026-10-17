@@ -2,6 +2,12 @@
   "appId": "br.com.clareza.financeiro",
   "appName": "Clareza Financeiro",
   "webDir": "www",
+  "loggingBehavior": "none",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto",
+    "backgroundColor": "#f6f5ef",
+    "allowMixedContent": false
+  },
   "server": {
     "androidScheme": "https"
   }

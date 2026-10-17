@@ -12,7 +12,17 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
-## Entrega em andamento — 16/10/2026
+## Android em andamento — 17/10/2026
+
+Pedido atual: entregar APK instalável do Clareza, conectado ao Render, sem servidor no computador. Plano e critérios em `docs/android.md`. A base Capacitor 7 existe, mas ainda não havia APK validado. Preparar JDK 21 separado do Java 25 do backend e Android SDK local; não alterar o Java global. Validar exportação nativa, navegação, segurança e regressões web antes da entrega. Não confundir testes no navegador com execução em um aparelho Android.
+
+Implementado nesta etapa: plugin Java `ClarezaFiles` exporta CSV pelo seletor do Android, sem armazenamento intermediário ou permissão ampla; Voltar fecha formulários; backup e HTTP desativados; ícone/splash próprios; service worker desligado no contêiner nativo; logs do Capacitor desativados. Erros de autenticação da API agora incluem CORS para o Android conseguir distinguir chave inválida de falta de conexão.
+
+Verificado: sete testes backend, seis de navegador e quatro unitários Android aprovados; cenário completo no emulador Android 15/API 35 com APK instalado passou por login, CRUD com H2 descartável, recarga, botão Voltar, cancelamento do seletor e CSV efetivamente gravado/lido. Teste em `tests-android/`, configuração `playwright.android.config.cjs`; exige AVD dedicado `Clareza_API_35`, não telefone pessoal. Requisições do APK são encaminhadas ao backend local por automação; isso não confirma login de produção.
+
+Gradle `assembleDebug testDebugUnitTest lintDebug` e assinatura v1/v2 fazem parte de `npm run apk` em `mobile/`. APK em `mobile/artifacts/Clareza-1.0-debug.apk` (ignorado pelo Git). Ferramentas em `%LOCALAPPDATA%/ClarezaTools` e SDK em `%LOCALAPPDATA%/Android/Sdk`. A assinatura é de depuração, não de Play Store. HTTP local não é habilitado no APK. JavaScript usa AbortController com timer para funcionar também em WebViews sem `AbortSignal.timeout`; regressão coberta nos testes.
+
+## Entrega web — 16/10/2026
 
 Objetivo: acessar a PWA pelo próprio endereço do Render, entrar com a chave e operar lançamentos reais, sem servidor separado no computador. Plano e critérios em `docs/funcionalidade.md`.
 
@@ -80,9 +90,10 @@ Após alterar `private-app/`, sincronizar antes de abrir/gerar o Android:
 
 ```powershell
 cd mobile
-npm run sync-web
-npm run build
+npm run apk
 ```
+
+`npm run build` apenas sincroniza o Capacitor; `npm run apk` compila, testa e entrega o instalador no Windows. Consulte `docs/android.md` para instalar no celular e reproduzir os testes.
 
 ## Convenções de produto
 

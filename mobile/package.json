@@ -5,6 +5,7 @@
   "scripts": {
     "sync-web": "node scripts/sync-web.js",
     "build": "npm run sync-web && cap sync android",
+    "apk": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-apk.ps1",
     "open:android": "npm run build && cap open android"
   },
   "dependencies": {

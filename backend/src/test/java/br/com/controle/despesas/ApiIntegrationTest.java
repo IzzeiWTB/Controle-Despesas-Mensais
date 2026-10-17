@@ -48,7 +48,12 @@ class ApiIntegrationTest {
                         .header("Access-Control-Request-Headers", "content-type,x-api-key"))
                 .andExpect(status().isOk()).andExpect(header().exists("Access-Control-Allow-Origin"));
         mvc.perform(get("/api/movimentacoes").header("Origin", "http://localhost:3000"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Access-Control-Allow-Origin", "*"));
+        mvc.perform(options("/api/movimentacoes").header("Origin", "https://localhost")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "x-api-key"))
+                .andExpect(status().isOk()).andExpect(header().exists("Access-Control-Allow-Origin"));
     }
 
     @Test void createsReadsUpdatesAndDeletesWithinPeriod() throws Exception {

@@ -1,6 +1,7 @@
 'use strict';
 
 const $ = selector => document.querySelector(selector);
+const nativeAndroid = window.Capacitor?.isNativePlatform?.() === true;
 const CATEGORIES = ['Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Lazer', 'Assinaturas', 'Salário', 'Outros'];
 const ICONS = { Alimentação: '⌁', Transporte: '↗', Moradia: '⌂', Saúde: '✚', Lazer: '◌', Assinaturas: '◇', Salário: '↓', Outros: '·' };
 const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -15,7 +16,7 @@ let apiUrl = readStorage(sessionStorage, 'clareza-api-url', DEFAULT_API);
 let apiKey = readStorage(sessionStorage, 'clareza-api-key');
 let privacyMode = readStorage(localStorage, 'clareza-privacy-mode') === 'true';
 let movements = [], budgets = {}, editingId = null, deferredInstallPrompt;
-let loadedPeriod = null, loadVersion = 0, saving = false;
+let loadedPeriod = null, loadVersion = 0, saving = false, exporting = false;
 const money = value => privacyMode ? '••••••' : formatter.format(value || 0);
 const cents = value => Math.round(Number(value) * 100);
 
@@ -44,25 +45,29 @@ function validateUrl(value) {
   return url.href.replace(/\/$/, '');
 }
 async function request(path, options = {}) {
-  let response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
   try {
-    response = await fetch(`${apiUrl}${path}`, {
-      ...options, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(90000),
-      headers: { 'X-API-Key': apiKey, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
-    });
-  } catch (error) {
-    throw new Error(error.name === 'TimeoutError' ? 'O servidor demorou para responder. Aguarde e tente novamente.' : 'Sem conexão com o servidor. Verifique sua internet e o endereço da API.');
-  }
-  if (!response.ok) {
-    if (response.status === 401) {
-      endSession();
-      throw new Error('Chave inválida ou expirada. Entre novamente.');
+    let response;
+    try {
+      response = await fetch(`${apiUrl}${path}`, {
+        ...options, cache: 'no-store', redirect: 'error', signal: controller.signal,
+        headers: { 'X-API-Key': apiKey, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
+      });
+    } catch {
+      throw new Error(controller.signal.aborted ? 'O servidor demorou para responder. Aguarde e tente novamente.' : 'Sem conexão com o servidor. Verifique sua internet e o endereço da API.');
     }
-    if (response.status === 400) throw new Error('Revise os campos: descrição, data, categoria e valor com até duas casas decimais.');
-    if (response.status === 404) throw new Error('Registro ou endereço não encontrado. Atualize a lista.');
-    throw new Error(`O servidor não concluiu a operação (${response.status}). Tente novamente.`);
-  }
-  return response.status === 204 ? null : response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        endSession();
+        throw new Error('Chave inválida ou expirada. Entre novamente.');
+      }
+      if (response.status === 400) throw new Error('Revise os campos: descrição, data, categoria e valor com até duas casas decimais.');
+      if (response.status === 404) throw new Error('Registro ou endereço não encontrado. Atualize a lista.');
+      throw new Error(`O servidor não concluiu a operação (${response.status}). Tente novamente.`);
+    }
+    return response.status === 204 ? null : await response.json();
+  } finally { clearTimeout(timeout); }
 }
 function status(message, error = false) {
   $('#dashboard-status').textContent = message;
@@ -96,7 +101,7 @@ async function load() {
 }
 function render() {
   const ready = loadedPeriod === $('#period').value;
-  $('#export').disabled = !ready || !movements.length;
+  $('#export').disabled = exporting || !ready || !movements.length;
   const { entries, expenses, balance } = totals();
   for (const [id, value] of [['balance', balance], ['entries', entries], ['expenses', expenses]]) {
     $(`#${id}`).textContent = ready ? money(value) : '—';
@@ -239,8 +244,8 @@ function updatePrivacy() {
   $('#privacy').setAttribute('aria-pressed', String(privacyMode));
 }
 $('#privacy').onclick = () => { privacyMode = !privacyMode; store(localStorage, 'clareza-privacy-mode', String(privacyMode)); updatePrivacy(); render(); };
-$('#export').onclick = () => {
-  if (!loadedPeriod || !movements.length) return;
+$('#export').onclick = async () => {
+  if (exporting || !loadedPeriod || !movements.length) return;
   if (privacyMode && !confirm('O CSV contém valores reais mesmo com o modo privacidade. Exportar?')) return;
   const cell = value => {
     let text = String(value ?? '');
@@ -249,13 +254,32 @@ $('#export').onclick = () => {
   };
   const rows = movements.map(x => [x.data, x.descricao, x.categoria, x.conta || '', x.tipo, Number(x.valor).toFixed(2).replace('.', ','), x.recorrente ? 'Sim' : 'Não']);
   const csv = [['Data', 'Descrição', 'Categoria', 'Conta', 'Tipo', 'Valor', 'Recorrente'], ...rows].map(row => row.map(cell).join(';')).join('\r\n');
+  if (nativeAndroid) {
+    exporting = true;
+    $('#export').disabled = true;
+    try {
+      const result = await window.Capacitor.nativePromise('ClarezaFiles', 'exportCsv', {
+        filename: `clareza-${loadedPeriod}.csv`, content: `\uFEFF${csv}`
+      });
+      if (apiKey) status(result.saved ? 'CSV salvo no local escolhido.' : 'Exportação cancelada.');
+    } catch {
+      if (apiKey) status('Não foi possível salvar o CSV. Tente novamente e escolha outro local.', true);
+    } finally { exporting = false; render(); }
+    return;
+  }
   const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url; link.download = `clareza-${loadedPeriod}.csv`;
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferredInstallPrompt = event; $('#install').classList.remove('hidden'); });
+window.clarezaBack = () => {
+  if (saving || exporting) return true;
+  const dialog = document.querySelector('dialog[open]');
+  if (dialog) { dialog.close(); return true; }
+  return false;
+};
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); if (nativeAndroid) return; deferredInstallPrompt = event; $('#install').classList.remove('hidden'); });
 $('#install').onclick = async () => { if (!deferredInstallPrompt) return; await deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt = null; $('#install').classList.add('hidden'); };
 window.addEventListener('offline', () => status('Você está offline. É necessário conectar à internet para consultar e salvar lançamentos.', true));
 window.addEventListener('online', () => { if (apiKey) reload(); });
@@ -263,4 +287,4 @@ $('#period').value = localDate().slice(0, 7);
 $('#api-url').value = apiUrl;
 updatePrivacy();
 if (apiKey) { $('#api-key').value = apiKey; connect(); }
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { /* app remains usable without installation */ }));
+if (!nativeAndroid && 'serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { /* app remains usable without installation */ }));

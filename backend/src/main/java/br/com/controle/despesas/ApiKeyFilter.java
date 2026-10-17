@@ -30,6 +30,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
         if (configuredApiKey.isBlank()) {
+            allowErrorFromApp(request, response);
             response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Configure APP_API_KEY no servidor");
             return;
         }
@@ -39,6 +40,13 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
+        allowErrorFromApp(request, response);
         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Chave invalida");
+    }
+
+    // Match the controllers' public-origin policy even when auth stops before MVC.
+    // No credentials/cookies are allowed; the API key remains mandatory.
+    private void allowErrorFromApp(HttpServletRequest request, HttpServletResponse response) {
+        if (request.getHeader("Origin") != null) response.setHeader("Access-Control-Allow-Origin", "*");
     }
 }
