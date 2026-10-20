@@ -573,17 +573,57 @@ $('#close-of').onclick = () => {
   if (!saving) $('#of-dialog').close();
 };
 $('#of-dialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+$('#connect-real-btn').onclick = async () => {
+  if (saving) return;
+  const btn = $('#connect-real-btn');
+  saving = true;
+  btn.disabled = true;
+  $('#of-error').textContent = 'Iniciando conexão segura com a Pluggy…';
+  try {
+    const res = await request('/open-finance/connect-token', { method: 'POST' });
+    if (res && res.connectToken && window.PluggyConnect) {
+      $('#of-dialog').close();
+      const pluggy = new window.PluggyConnect({
+        connectToken: res.connectToken,
+        onSuccess: async (itemData) => {
+          status('Banco conectado! Sincronizando contas, faturas e investimentos…');
+          try {
+            const syncRes = await request('/open-finance/sincronizar', {
+              method: 'POST',
+              body: JSON.stringify({ itemId: itemData?.item?.id })
+            });
+            await load();
+            status(`Conexão concluída: ${syncRes?.contasSincronizadas || 0} conta(s), ${syncRes?.investimentosSincronizados || 0} investimento(s) e ${syncRes?.transacoesImportadas || 0} lançamento(s) atualizados.`);
+          } catch (e) {
+            status(`Banco conectado, mas houve falha ao sincronizar: ${e.message}`, true);
+          }
+        },
+        onError: (error) => {
+          status(`Erro no Pluggy Connect: ${error?.message || 'Falha na conexão bancária'}`, true);
+        }
+      });
+      pluggy.init();
+    } else {
+      $('#of-error').textContent = res?.mensagem || 'Chaves da Pluggy não configuradas no Render. Use "Simular Contas em Modo Sandbox" para testar.';
+    }
+  } catch (error) {
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    btn.disabled = false;
+  }
+};
 $('#sync-of-btn').onclick = async () => {
   if (saving) return;
   const btn = $('#sync-of-btn');
   saving = true;
   btn.disabled = true;
-  $('#of-error').textContent = 'Sincronizando contas e investimentos via Open Finance…';
+  $('#of-error').textContent = 'Sincronizando modo Sandbox…';
   try {
-    const res = await request('/open-finance/sincronizar', { method: 'POST', body: JSON.stringify({ itemId: 'sandbox-item' }) });
+    const res = await request('/open-finance/sincronizar', { method: 'POST', body: JSON.stringify({ itemId: 'mock-sandbox-item' }) });
     $('#of-dialog').close();
     await load();
-    const msg = `Open Finance sincronizado: ${res?.contasSincronizadas || 0} conta(s), ${res?.investimentosSincronizados || 0} investimento(s) e ${res?.transacoesImportadas || 0} lançamento(s) importado(s).`;
+    const msg = `Open Finance sincronizado (modo simulação): ${res?.contasSincronizadas || 0} conta(s), ${res?.investimentosSincronizados || 0} investimento(s) e ${res?.transacoesImportadas || 0} lançamento(s) importado(s).`;
     status(msg);
   } catch (error) {
     $('#of-error').textContent = error.message;

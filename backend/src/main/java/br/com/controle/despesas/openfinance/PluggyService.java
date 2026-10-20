@@ -123,7 +123,7 @@ public class PluggyService {
     public Map<String, Object> sincronizarItem(String itemId) {
         String idFinal = (itemId == null || itemId.isBlank()) ? "mock-pluggy-item" : itemId.trim();
 
-        if (isConfigurado() && !idFinal.startsWith("mock-")) {
+        if (isConfigurado() && !idFinal.startsWith("mock") && !idFinal.startsWith("sandbox")) {
             try {
                 return sincronizarComPluggyReal(idFinal);
             } catch (Exception e) {
