@@ -58,4 +58,42 @@ public class MovimentacaoController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lancamento nao encontrado"));
         repository.delete(movimentacao);
     }
+
+    @PostMapping("/recorrencias")
+    @org.springframework.transaction.annotation.Transactional
+    public java.util.Map<String, Object> repetirRecorrentes(@RequestParam String periodo) {
+        java.time.YearMonth destino;
+        try {
+            destino = java.time.YearMonth.parse(periodo);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Periodo invalido");
+        }
+        java.time.YearMonth origem = destino.minusMonths(1);
+        List<Movimentacao> recorrentesOrigem = repository.findByRecorrenteTrueAndDataBetweenOrderByDataAsc(
+                origem.atDay(1), origem.atEndOfMonth());
+        List<Movimentacao> existentesDestino = repository.findByDataBetweenOrderByDataDesc(
+                destino.atDay(1), destino.atEndOfMonth());
+        List<Movimentacao> criados = new java.util.ArrayList<>();
+        for (Movimentacao item : recorrentesOrigem) {
+            boolean jaExiste = java.util.stream.Stream.concat(existentesDestino.stream(), criados.stream()).anyMatch(existente ->
+                    existente.isRecorrente()
+                            && existente.getDescricao().equalsIgnoreCase(item.getDescricao())
+                            && existente.getTipo().equalsIgnoreCase(item.getTipo())
+                            && existente.getCategoria().equalsIgnoreCase(item.getCategoria())
+                            && existente.getValor().compareTo(item.getValor()) == 0);
+            if (!jaExiste) {
+                Movimentacao novo = new Movimentacao();
+                novo.setDescricao(item.getDescricao());
+                novo.setValor(item.getValor());
+                int dia = Math.min(item.getData().getDayOfMonth(), destino.lengthOfMonth());
+                novo.setData(destino.atDay(dia));
+                novo.setCategoria(item.getCategoria());
+                novo.setTipo(item.getTipo());
+                novo.setConta(item.getConta());
+                novo.setRecorrente(true);
+                criados.add(repository.save(novo));
+            }
+        }
+        return java.util.Map.of("criados", criados.size(), "itens", criados);
+    }
 }

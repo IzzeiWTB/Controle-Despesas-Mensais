@@ -15,7 +15,7 @@ const DEFAULT_API = configured ? new URL(configured, location.href).href : 'http
 let apiUrl = readStorage(sessionStorage, 'clareza-api-url', DEFAULT_API);
 let apiKey = readStorage(sessionStorage, 'clareza-api-key');
 let privacyMode = readStorage(localStorage, 'clareza-privacy-mode') === 'true';
-let movements = [], budgets = {}, editingId = null, deferredInstallPrompt;
+let movements = [], budgets = {}, goals = [], ofAccounts = [], ofInvestments = [], editingId = null, editingGoalId = null, deferredInstallPrompt;
 let loadedPeriod = null, loadVersion = 0, saving = false, exporting = false;
 const money = value => privacyMode ? '••••••' : formatter.format(value || 0);
 const cents = value => Math.round(Number(value) * 100);
@@ -90,6 +90,26 @@ async function load() {
     if (version !== loadVersion) return false;
     if (!Array.isArray(items)) throw new Error('Resposta inesperada. Confira o endereço da API.');
     movements = items;
+    try {
+      const remoteBudgets = await request('/limites');
+      if (remoteBudgets && typeof remoteBudgets === 'object') {
+        budgets = Object.fromEntries(CATEGORIES.map(category => {
+          const val = Number(remoteBudgets[category]);
+          return [category, Number.isFinite(val) && val >= 0 ? val : 0];
+        }));
+        store(localStorage, `clareza-budgets:${apiUrl}`, JSON.stringify(budgets));
+      }
+    } catch { /* use local cache */ }
+    try {
+      const remoteGoals = await request('/metas');
+      goals = Array.isArray(remoteGoals) ? remoteGoals : [];
+    } catch { /* keep goals empty if offline */ }
+    try {
+      const accs = await request('/open-finance/contas');
+      ofAccounts = Array.isArray(accs) ? accs : [];
+      const invs = await request('/open-finance/investimentos');
+      ofInvestments = Array.isArray(invs) ? invs : [];
+    } catch { ofAccounts = []; ofInvestments = []; }
     loadedPeriod = period;
     render();
     status(`${items.length} lançamento(s) em ${monthName(period)}. Dados atualizados.`);
@@ -102,6 +122,7 @@ async function load() {
 function render() {
   const ready = loadedPeriod === $('#period').value;
   $('#export').disabled = exporting || !ready || !movements.length;
+  $('#repeat-recurring').disabled = !ready;
   const { entries, expenses, balance } = totals();
   for (const [id, value] of [['balance', balance], ['entries', entries], ['expenses', expenses]]) {
     $(`#${id}`).textContent = ready ? money(value) : '—';
@@ -115,6 +136,9 @@ function render() {
   $('#insight-text').textContent = !ready ? 'Atualize para consultar este período.' : privacyMode ? 'Valores ocultos. Mostre os valores para ver o resumo.' : largest ? `A maior despesa registrada é ${largest.descricao}: ${money(largest.valor)}. Este resumo considera apenas os lançamentos cadastrados.` : 'Adicione suas entradas e despesas para acompanhar o mês.';
   renderList();
   renderBudgets();
+  renderGoals();
+  renderOpenFinance();
+  renderAccounts();
 }
 function renderList() {
   if (!loadedPeriod) { $('#list').innerHTML = '<p class="empty">Os dados deste mês ainda não foram carregados.</p>'; return; }
@@ -134,6 +158,121 @@ function renderBudgets() {
     const percentage = !privacyMode && limit ? Math.min(100, Math.round(spent / limit * 100)) : 0;
     return `<div class="budget"><div><span>${category}</span><strong>${money(spent)} <small>${limit ? `/ ${money(limit)}` : 'sem limite'}</small></strong></div><div class="progress ${over && !privacyMode ? 'over' : ''}" aria-hidden="true"><i style="width:${percentage}%"></i></div><small>${privacyMode ? 'Valores ocultos' : limit ? over ? `${money(spent - limit)} acima do limite` : `${money(limit - spent)} disponíveis no limite` : 'Defina um limite para acompanhar'}</small></div>`;
   }).join('') || '<p class="empty">Defina limites para acompanhar suas categorias.</p>';
+}
+function renderGoals() {
+  if (!loadedPeriod) { $('#goal-list').innerHTML = '<p class="empty">Aguardando carregamento.</p>'; return; }
+  if (!goals.length) {
+    $('#goal-list').innerHTML = '<p class="empty">Nenhuma meta cadastrada. Use “+ Nova meta” para começar.</p>';
+    return;
+  }
+  $('#goal-list').innerHTML = goals.map(g => {
+    const alvo = Number(g.valorAlvo) || 0;
+    const atual = Number(g.valorAtual) || 0;
+    const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 0;
+    const concluida = atual >= alvo && alvo > 0;
+    const prazoFmt = g.prazo ? new Date(`${g.prazo}T12:00:00`).toLocaleDateString('pt-BR') : null;
+    return `<div class="goal">
+      <div class="goal-header">
+        <strong>${clean(g.nome)}</strong>
+        <div class="row-actions">
+          <button data-edit-goal="${clean(g.id)}" aria-label="Editar meta ${clean(g.nome)}">Editar</button>
+          <button data-delete-goal="${clean(g.id)}" aria-label="Excluir meta ${clean(g.nome)}">×</button>
+        </div>
+      </div>
+      <div class="progress ${concluida ? 'completed' : ''}" aria-hidden="true"><i style="width:${privacyMode ? 0 : pct}%"></i></div>
+      <div class="goal-values">
+        <span>${privacyMode ? '••••' : `${pct}% concluído`}</span>
+        <strong>${privacyMode ? money(0) : `${money(atual)} / ${money(alvo)}`}</strong>
+      </div>
+      ${prazoFmt ? `<small class="goal-date">Prazo: ${prazoFmt}</small>` : ''}
+    </div>`;
+  }).join('');
+}
+function renderAccounts() {
+  if (!loadedPeriod) { $('#account-list').innerHTML = '<p class="empty">Aguardando lançamentos.</p>'; return; }
+  const accounts = {};
+  for (const m of movements) {
+    const name = (m.conta && m.conta.trim()) ? m.conta.trim() : 'Sem conta informada';
+    if (!accounts[name]) accounts[name] = { entradas: 0, despesas: 0 };
+    if (m.tipo === 'ENTRADA') accounts[name].entradas += cents(m.valor);
+    else accounts[name].despesas += cents(m.valor);
+  }
+  const keys = Object.keys(accounts);
+  if (!keys.length) {
+    $('#account-list').innerHTML = '<p class="empty">Nenhum lançamento no período.</p>';
+    return;
+  }
+  $('#account-list').innerHTML = keys.sort().map(name => {
+    const ent = accounts[name].entradas / 100;
+    const desp = accounts[name].despesas / 100;
+    const saldo = (accounts[name].entradas - accounts[name].despesas) / 100;
+    return `<div class="account-item">
+      <div>
+        <strong>${clean(name)}</strong>
+        <small>Entradas: ${money(ent)} · Despesas: ${money(desp)}</small>
+      </div>
+      <strong class="${saldo < 0 ? 'danger' : saldo > 0 ? 'income-text' : ''}">${money(saldo)}</strong>
+    </div>`;
+  }).join('');
+}
+function renderOpenFinance() {
+  if (!loadedPeriod) {
+    $('#of-accounts-list').innerHTML = '<p class="empty">Aguardando carregamento.</p>';
+    $('#of-investments-list').innerHTML = '<p class="empty">Aguardando carregamento.</p>';
+    return;
+  }
+  if (!ofAccounts.length) {
+    $('#of-accounts-list').innerHTML = '<p class="empty">Nenhuma conta conectada. Conecte pelo Open Finance.</p>';
+  } else {
+    $('#of-accounts-list').innerHTML = ofAccounts.map(acc => {
+      const isCard = acc.tipo === 'CARTAO_CREDITO';
+      const tagLabel = isCard ? 'Cartão' : (acc.tipo === 'POUPANCA' ? 'Poupança' : 'Conta Corrente');
+      const tagClass = isCard ? 'of-tag card' : 'of-tag';
+      const details = isCard
+        ? `Fatura atual: <strong>${money(acc.faturaAtual || 0)}</strong> · Limite: ${money(acc.limiteCredito || 0)}`
+        : `Saldo disponível: <strong class="${acc.saldo < 0 ? 'danger' : 'income-text'}">${money(acc.saldo || 0)}</strong>`;
+      return `<div class="of-card">
+        <div class="of-card-header">
+          <div>
+            <strong>${clean(acc.instituicao)}</strong>
+            <small class="muted" style="display:block">${clean(acc.nome)}</small>
+          </div>
+          <span class="${tagClass}">${tagLabel}</span>
+        </div>
+        <div class="goal-values" style="margin-top:8px">
+          <span>${details}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  if (!ofInvestments.length) {
+    $('#of-investments-list').innerHTML = '<p class="empty">Nenhum investimento sincronizado.</p>';
+  } else {
+    const totalInvestido = ofInvestments.reduce((sum, inv) => sum + cents(inv.valorInvestido || 0), 0) / 100;
+    const itemsHtml = ofInvestments.map(inv => {
+      const rentab = inv.rentabilidade != null ? ` · Rentab.: ${Number(inv.rentabilidade).toFixed(2).replace('.', ',')}%` : '';
+      return `<div class="of-card">
+        <div class="of-card-header">
+          <div>
+            <strong>${clean(inv.instituicao)}</strong>
+            <small class="muted" style="display:block">${clean(inv.nome)}</small>
+          </div>
+          <span class="of-tag inv">${clean(inv.tipo || 'INVESTIMENTO')}</span>
+        </div>
+        <div class="goal-values" style="margin-top:8px">
+          <span>Posição: <strong>${money(inv.valorInvestido || 0)}</strong>${rentab}</span>
+        </div>
+      </div>`;
+    }).join('');
+    $('#of-investments-list').innerHTML = `<div class="account-item" style="margin-bottom:12px;background:var(--mint);border-color:transparent">
+      <div>
+        <strong style="color:var(--forest)">Total em Investimentos</strong>
+        <small style="color:var(--forest)">Patrimônio consolidado</small>
+      </div>
+      <strong style="color:var(--forest)">${money(totalInvestido)}</strong>
+    </div>` + itemsHtml;
+  }
 }
 function openMovement(item) {
   editingId = item?.id || null;
@@ -155,6 +294,9 @@ function endSession() {
   try { sessionStorage.removeItem('clareza-api-key'); } catch { /* unavailable storage */ }
   apiKey = '';
   movements = [];
+  goals = [];
+  ofAccounts = [];
+  ofInvestments = [];
   loadedPeriod = null;
   $('#api-key').value = '';
   $('#dashboard').classList.add('hidden');
@@ -230,14 +372,112 @@ $('#edit-budgets').onclick = () => {
   $('#budget-dialog').showModal();
 };
 $('#close-budgets').onclick = () => $('#budget-dialog').close();
-$('#budget-form').onsubmit = event => {
+$('#repeat-recurring').onclick = async () => {
+  if (!loadedPeriod) return;
+  if (!confirm(`Trazer os lançamentos recorrentes do mês anterior para ${monthName($('#period').value)}?`)) return;
+  status('Buscando e importando recorrentes…');
+  try {
+    const res = await request(`/movimentacoes/recorrencias?periodo=${$('#period').value}`, { method: 'POST' });
+    const count = res?.criados || 0;
+    await load();
+    status(count > 0 ? `${count} lançamento(s) recorrente(s) importado(s) para este mês.` : 'Nenhum novo lançamento recorrente para importar.');
+  } catch (error) {
+    status(error.message, true);
+  }
+};
+$('#budget-form').onsubmit = async event => {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  budgets = Object.fromEntries(CATEGORIES.map(category => [category, Number(data.get(category)) || 0]));
-  const saved = store(localStorage, `clareza-budgets:${apiUrl}`, JSON.stringify(budgets));
-  $('#budget-dialog').close();
-  renderBudgets();
-  status(saved ? 'Limites salvos neste navegador para todos os meses.' : 'Limites aplicados nesta sessão. O navegador bloqueou o armazenamento.', !saved);
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const newBudgets = Object.fromEntries(CATEGORIES.map(category => [category, Number(data.get(category)) || 0]));
+  try {
+    const updated = await request('/limites', { method: 'PUT', body: JSON.stringify(newBudgets) });
+    budgets = Object.fromEntries(CATEGORIES.map(category => [category, Number(updated?.[category]) || 0]));
+    store(localStorage, `clareza-budgets:${apiUrl}`, JSON.stringify(budgets));
+    $('#budget-dialog').close();
+    renderBudgets();
+    status('Limites salvos e sincronizados com seus dispositivos.');
+  } catch (error) {
+    budgets = newBudgets;
+    const saved = store(localStorage, `clareza-budgets:${apiUrl}`, JSON.stringify(budgets));
+    $('#budget-dialog').close();
+    renderBudgets();
+    status(saved ? 'Limites salvos localmente neste navegador.' : 'Limites aplicados nesta sessão. O navegador bloqueou o armazenamento.', !saved);
+  }
+};
+function openGoal(item) {
+  editingGoalId = item?.id || null;
+  const form = $('#goal-form');
+  form.reset();
+  $('#goal-error').textContent = '';
+  $('#goal-form-title').textContent = item ? 'Editar meta' : 'Nova meta';
+  if (item) {
+    form.elements.nome.value = item.nome ?? '';
+    form.elements.valorAlvo.value = item.valorAlvo ?? '';
+    form.elements.valorAtual.value = item.valorAtual ?? '0';
+    form.elements.prazo.value = item.prazo ?? '';
+  }
+  $('#goal-dialog').showModal();
+}
+$('#add-goal').onclick = () => openGoal();
+$('#close-goal').onclick = () => { if (!saving) $('#goal-dialog').close(); };
+$('#goal-dialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+$('#goal-form').onsubmit = async event => {
+  event.preventDefault();
+  if (saving) return;
+  const form = event.currentTarget, data = Object.fromEntries(new FormData(form));
+  const payload = {
+    nome: data.nome.trim(),
+    valorAlvo: Number(data.valorAlvo),
+    valorAtual: Number(data.valorAtual) || 0,
+    prazo: data.prazo ? data.prazo : null
+  };
+  if (!payload.nome || !Number.isFinite(payload.valorAlvo) || payload.valorAlvo <= 0) {
+    $('#goal-error').textContent = 'Informe um nome e valor alvo válidos.';
+    return;
+  }
+  saving = true;
+  const controls = [...form.elements];
+  controls.forEach(control => control.disabled = true);
+  $('#goal-error').textContent = 'Salvando…';
+  try {
+    await request(editingGoalId ? `/metas/${editingGoalId}` : '/metas', {
+      method: editingGoalId ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    $('#goal-dialog').close();
+    try {
+      const items = await request('/metas');
+      goals = Array.isArray(items) ? items : [];
+    } catch { /* keep current goals */ }
+    renderGoals();
+    status('Meta salva com sucesso.');
+  } catch (error) {
+    $('#goal-error').textContent = error.message;
+  } finally {
+    saving = false;
+    controls.forEach(control => control.disabled = false);
+  }
+};
+$('#goal-list').onclick = async event => {
+  const edit = event.target.closest('[data-edit-goal]'), remove = event.target.closest('[data-delete-goal]');
+  if (edit) {
+    const item = goals.find(x => String(x.id) === edit.dataset.editGoal);
+    if (item) openGoal(item);
+  }
+  if (remove && !remove.disabled && confirm('Excluir esta meta? Essa operação não pode ser desfeita.')) {
+    remove.disabled = true;
+    try {
+      await request(`/metas/${remove.dataset.deleteGoal}`, { method: 'DELETE' });
+      goals = goals.filter(x => String(x.id) !== remove.dataset.deleteGoal);
+      renderGoals();
+      status('Meta excluída.');
+    } catch (error) {
+      status(error.message, true);
+    } finally {
+      remove.disabled = false;
+    }
+  }
 };
 function updatePrivacy() {
   $('#privacy').textContent = privacyMode ? 'Mostrar valores' : 'Ocultar valores';
@@ -272,6 +512,85 @@ $('#export').onclick = async () => {
   link.href = url; link.download = `clareza-${loadedPeriod}.csv`;
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('#ai-cat-btn').onclick = async () => {
+  const form = $('#movement-form');
+  const desc = form.elements.descricao.value.trim();
+  if (!desc) {
+    $('#form-error').textContent = 'Digite uma descrição para a IA categorizar.';
+    return;
+  }
+  const btn = $('#ai-cat-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Pensando…';
+  try {
+    const res = await request('/ia/categorizar', { method: 'POST', body: JSON.stringify({ descricao: desc }) });
+    if (res && res.categoria) {
+      if (![...form.elements.categoria.options].some(o => o.value === res.categoria)) {
+        form.elements.categoria.add(new Option(res.categoria, res.categoria));
+      }
+      form.elements.categoria.value = res.categoria;
+      $('#form-error').textContent = `Categoria sugerida (${res.origem === 'GEMINI' ? 'Gemini IA' : 'Regra'}): ${res.categoria}`;
+    }
+  } catch (error) {
+    $('#form-error').textContent = `Não foi possível sugerir: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+};
+$('#ai-insight-btn').onclick = async () => {
+  if (!loadedPeriod) return;
+  const btn = $('#ai-insight-btn');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Gerando insights…';
+  try {
+    const res = await request(`/ia/insights?periodo=${$('#period').value}`);
+    if (res) {
+      if (res.titulo) $('#insight-title').textContent = res.titulo;
+      if (res.resumo) $('#insight-text').textContent = res.resumo;
+      const sugBox = $('#ai-suggestions');
+      if (Array.isArray(res.sugestoes) && res.sugestoes.length) {
+        sugBox.innerHTML = `<strong>Dicas da IA:</strong><ul>${res.sugestoes.map(s => `<li>${clean(s)}</li>`).join('')}</ul>`;
+        sugBox.classList.remove('hidden');
+      }
+      status(`Leitura do mês gerada com ${res.origem === 'GEMINI' ? 'Google Gemini' : 'análise inteligente'}.`);
+    }
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+};
+$('#open-finance-btn').onclick = () => {
+  $('#of-error').textContent = '';
+  $('#of-dialog').showModal();
+};
+$('#close-of').onclick = () => {
+  if (!saving) $('#of-dialog').close();
+};
+$('#of-dialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+$('#sync-of-btn').onclick = async () => {
+  if (saving) return;
+  const btn = $('#sync-of-btn');
+  saving = true;
+  btn.disabled = true;
+  $('#of-error').textContent = 'Sincronizando contas e investimentos via Open Finance…';
+  try {
+    const res = await request('/open-finance/sincronizar', { method: 'POST', body: JSON.stringify({ itemId: 'sandbox-item' }) });
+    $('#of-dialog').close();
+    await load();
+    const msg = `Open Finance sincronizado: ${res?.contasSincronizadas || 0} conta(s), ${res?.investimentosSincronizados || 0} investimento(s) e ${res?.transacoesImportadas || 0} lançamento(s) importado(s).`;
+    status(msg);
+  } catch (error) {
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    btn.disabled = false;
+  }
 };
 window.clarezaBack = () => {
   if (saving || exporting) return true;

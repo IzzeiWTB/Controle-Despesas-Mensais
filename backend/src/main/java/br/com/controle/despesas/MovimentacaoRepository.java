@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public interface MovimentacaoRepository extends JpaRepository<Movimentacao, UUID> {
     List<Movimentacao> findByDataBetweenOrderByDataDesc(LocalDate inicio, LocalDate fim);
+    List<Movimentacao> findByRecorrenteTrueAndDataBetweenOrderByDataAsc(LocalDate inicio, LocalDate fim);
 }

@@ -116,3 +116,96 @@ test('service worker does not cache authenticated responses', async ({ page }) =
   });
   expect(cached.some(url => url.includes('/api/'))).toBeFalsy();
 });
+
+test('financial goals, recurring repeat, and account breakdown', async ({ page }) => {
+  await login(page);
+  await page.locator('#period').fill('2026-10');
+  await page.locator('#period').dispatchEvent('change');
+  await expect(page.locator('#dashboard-status')).toContainText('Dados atualizados');
+
+  // Test Goal creation
+  await page.locator('#add-goal').click();
+  await page.locator('#goal-form [name=nome]').fill('Comprar notebook');
+  await page.locator('#goal-form [name=valorAlvo]').fill('4000');
+  await page.locator('#goal-form [name=valorAtual]').fill('1500');
+  await page.locator('#goal-form [name=prazo]').fill('2026-12-31');
+  await page.locator('#goal-form [type=submit]').click();
+  await expect(page.locator('.goal')).toHaveCount(1);
+  await expect(page.locator('.goal')).toContainText('Comprar notebook');
+  await expect(page.locator('.goal')).toContainText('38%');
+
+  // Edit Goal
+  await page.locator('[data-edit-goal]').click();
+  await page.locator('#goal-form [name=valorAtual]').fill('4000');
+  await page.locator('#goal-form [type=submit]').click();
+  await expect(page.locator('.goal')).toContainText('100%');
+
+  // Delete Goal
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('[data-delete-goal]').click();
+  await expect(page.locator('.goal')).toHaveCount(0);
+
+  // Add movement with account
+  await page.locator('#add').click();
+  await page.locator('[name=descricao]').fill('Salário Mensal');
+  await page.locator('[name=valor]').fill('5000');
+  await page.locator('[name=tipo]').selectOption('ENTRADA');
+  await page.locator('[name=conta]').fill('Banco do Brasil');
+  await page.locator('[name=recorrente]').check();
+  await page.locator('#movement-form [type=submit]').click();
+
+  // Verify account breakdown
+  await expect(page.locator('#account-list')).toContainText('Banco do Brasil');
+  await expect(page.locator('#account-list')).toContainText('5.000,00');
+
+  // Go to next month 2026-11 and repeat recurring
+  await page.locator('#period').fill('2026-11');
+  await page.locator('#period').dispatchEvent('change');
+  await expect(page.locator('#dashboard-status')).toContainText('Dados atualizados');
+  await expect(page.locator('.transaction')).toHaveCount(0);
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#repeat-recurring').click();
+  await expect(page.locator('.transaction')).toHaveCount(1);
+  await expect(page.locator('.transaction')).toContainText('Salário Mensal');
+
+  // Clean up
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('[data-delete]').click();
+  await page.locator('#period').fill('2026-10');
+  await page.locator('#period').dispatchEvent('change');
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('[data-delete]').click();
+});
+
+test('ai categorization, insights and open finance synchronization', async ({ page }) => {
+  await login(page);
+  await page.locator('#period').fill('2026-10');
+  await page.locator('#period').dispatchEvent('change');
+  await expect(page.locator('#dashboard-status')).toContainText('Dados atualizados');
+
+  // 1. AI Categorization in movement form
+  await page.locator('#add').click();
+  await page.locator('[name=descricao]').fill('iFood Marmita');
+  await page.locator('#ai-cat-btn').click();
+  await expect(page.locator('[name=categoria]')).toHaveValue('Alimentação');
+  await expect(page.locator('#form-error')).toContainText('Alimentação');
+  await page.locator('#close').click();
+
+  // 2. Open Finance synchronization (mock sandbox)
+  await page.locator('#open-finance-btn').click();
+  await expect(page.locator('#of-dialog')).toBeVisible();
+  await page.locator('#sync-of-btn').click();
+  await expect(page.locator('#dashboard-status')).toContainText('Open Finance sincronizado');
+  await expect(page.locator('#of-accounts-list')).toContainText('Nubank');
+  await expect(page.locator('#of-accounts-list')).toContainText('Cartão');
+  await expect(page.locator('#of-accounts-list')).toContainText('Fatura atual:');
+  await expect(page.locator('#of-investments-list')).toContainText('Total em Investimentos');
+  await expect(page.locator('#of-investments-list')).toContainText('Tesouro Selic 2029');
+
+  // 3. AI Insights
+  await page.locator('#ai-insight-btn').click();
+  await expect(page.locator('#dashboard-status')).toContainText('gerada com');
+  await expect(page.locator('#insight-title')).not.toHaveText('Seu resumo está pronto.');
+  await expect(page.locator('#ai-suggestions')).toBeVisible();
+});

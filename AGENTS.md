@@ -12,6 +12,59 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Entrega Open Finance e Inteligência Artificial (Google Gemini + Pluggy) — 18/10/2026
+
+Objetivo: capacitar o Clareza com conexão bancária automática via Open Finance (extrato unificado de contas, cartões de crédito e investimentos) e Inteligência Artificial generativa com Google Gemini para categorização preditiva e leitura analítica/acolhedora do mês.
+
+Implementado nesta etapa:
+- **Open Finance via Pluggy**:
+  - Entidades JPA `ContaConectada` e `Investimento`, repositórios dedicados e serviço `PluggyService`.
+  - Endpoints em `OpenFinanceController`: `GET /api/open-finance/contas`, `GET /api/open-finance/investimentos`, `POST /api/open-finance/sincronizar`, `POST /api/open-finance/connect-token` e `GET /api/open-finance/status`.
+  - Suporte duplo: API real do Pluggy conectada via credenciais (`PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`) e modo Sandbox simulado quando desconfiguradas, permitindo testes sem credenciais bancárias de produção.
+  - Sincronização automática que extrai contas, faturas e limites de cartão, posições consolidadas de investimentos (renda fixa, ações, índices) e transações dos últimos 30 dias que são categorizadas automaticamente pela IA e salvas nas movimentações do mês.
+- **Inteligência Artificial (Google Gemini)**:
+  - `GeminiService` e `IaController`: `POST /api/ia/categorizar`, `GET /api/ia/insights?periodo=YYYY-MM` e `GET /api/ia/status`.
+  - Modelo `gemini-2.5-flash` via REST nativo (Java 25 `HttpClient` + Jackson, zero dependências externas extras) com ativação por `GEMINI_API_KEY`.
+  - Fallback heurístico e analítico inteligente e determinístico quando a chave não estiver configurada ou a rede estiver offline.
+  - Botão "✦ Sugerir com IA" no modal de lançamentos da PWA que prevê a categoria com base no histórico e descrição digitada.
+  - Botão "✦ Leitura com IA" no card "Clareza em Foco", fornecendo leitura acolhedora e dicas práticas considerando limites e metas.
+- **Interface e PWA**:
+  - Visão unificada de Contas e Cartões com faturas em aberto e limites de crédito.
+  - Visão consolidada de Investimentos com totalização de patrimônio e rentabilidade.
+  - Modal de sincronização do Open Finance com retorno amigável e proteção contra múltiplos cliques.
+- **Responsividade e Estilos**:
+  - Estilos dedicados (`.of-card`, `.of-tag`, `.ai-suggestions`) mantendo o design acolhedor do Clareza.
+
+Verificado:
+- Doze testes de backend aprovados (`ApiIntegrationTest` e `ApiKeyFilterTest`).
+- Oito testes E2E do Playwright aprovados (`npm run test:e2e`), cobrindo login, CRUD, limites, metas, exportação CSV, responsividade mobile, IA e Open Finance.
+- Validação estática: `node --check private-app/app.js`, `npm run check` e `git diff --check` aprovados sem advertências.
+- Contêiner Android: `npm --prefix mobile run apk` executou `assembleDebug testDebugUnitTest lintDebug` com sucesso, gerando APK assinado em `mobile/artifacts/Clareza-1.0-debug.apk` (SHA-256 `21F6C5121689C97492DE4DC37EC523F615698A70B450734E20FFB9B1A58BF0A2`).
+
+Pendências atuais:
+- Conexão bancária de produção depende de cadastrar as chaves `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` e `GEMINI_API_KEY` no painel do Render. Em ambiente local/sem chaves, o Clareza funciona plenamente no modo Sandbox / heurístico.
+
+## Entrega Limites, Metas e Recorrência — 18/10/2026
+
+Objetivo: evoluir o Clareza para sincronizar limites por categoria no backend, introduzir metas financeiras (objetivos de economia), permitir importar lançamentos recorrentes do mês anterior e exibir visão por conta.
+
+Implementado nesta etapa:
+- **Limites no Backend**: `LimiteCategoria`, `LimiteCategoriaRepository` e `LimiteCategoriaController` (`GET /api/limites`, `PUT /api/limites`). Teto por categoria com `BigDecimal` e validações completas (escala <= 2, precisão <= 12). A PWA sincroniza com a API e mantém fallback local caso offline.
+- **Metas Financeiras**: `MetaFinanceira`, `MetaFinanceiraRepository` e `MetaFinanceiraController` (`GET/POST/PUT/DELETE /api/metas`). CRUD completo na interface com barra de progresso visual, porcentagem concluída, valor guardado vs alvo, data limite opcional, edição e exclusão.
+- **Importação de Recorrentes**: Endpoint `POST /api/movimentacoes/recorrencias?periodo=YYYY-MM` no backend que localiza itens marcados como recorrentes no mês anterior e os clona no mês selecionado preservando valores, conta e categoria com proteção idempotente contra duplicações. Botão "Trazer recorrentes" na PWA com feedback visual.
+- **Visão por Conta**: Agrupamento em tempo real dos lançamentos do mês por conta/cartão, calculando entradas, saídas e saldo por conta.
+- **Responsividade Mobile**: Corrigido overflow horizontal no mobile (larguras <= 375px) com `flex-wrap: wrap` nas ações das seções.
+
+Verificado:
+- Dez testes de backend aprovados (`ApiIntegrationTest` e `ApiKeyFilterTest`).
+- Sete testes E2E do Playwright aprovados (`npm run test:e2e`), cobrindo login, CRUD, filtros, exportação CSV, limites sincronizados, criação/edição/exclusão de metas, repetição de recorrentes e responsividade mobile sem scroll horizontal.
+- Validação estática: `node --check private-app/app.js`, `npm run check` e `git diff --check` aprovados sem advertências.
+- Contêiner Android: `npm --prefix mobile run apk` executou `assembleDebug testDebugUnitTest lintDebug` com sucesso, gerando APK assinado em `mobile/artifacts/Clareza-1.0-debug.apk` (SHA-256 `3F99176C9817A50FC559D7591305530310A7B302A9245CDD46998D1E7E87E437`).
+
+Pendências atuais:
+- Investimentos e Open Finance não existem ainda.
+- As contas bancárias continuam sendo identificações nos lançamentos do mês, sem conciliação bancária externa automática.
+
 ## Entrega Android — 17/10/2026
 
 Pedido atendido nesta etapa: APK de teste instalável do Clareza, configurado para o Render, sem servidor no computador. Plano, instalação e critérios em `docs/android.md`. JDK 21 e SDK Android preparados separadamente do Java 25 do backend, sem alterar o Java global. Não confundir testes no emulador com execução no telefone do titular.
