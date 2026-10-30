@@ -195,6 +195,15 @@ test('ai categorization, insights and open finance synchronization', async ({ pa
   // 2. Open Finance synchronization (mock sandbox)
   await page.locator('#open-finance-btn').click();
   await expect(page.locator('#of-dialog')).toBeVisible();
+  await expect(page.locator('.of-meupluggy')).toContainText('MEU PLUGGY');
+  await page.locator('#link-item-btn').click();
+  await expect(page.locator('#of-error')).toContainText('Item ID');
+  await page.locator('#of-item-id').fill('item-de-teste-123');
+  await page.locator('#of-item-nome').fill('Nubank');
+  await page.locator('#link-item-btn').click();
+  await expect(page.locator('#of-error')).toContainText('PLUGGY_CLIENT_ID');
+  await expect(page.locator('#of-items')).toBeEmpty();
+  await page.locator('.of-more summary').click();
   await page.locator('#sync-of-btn').click();
   await expect(page.locator('#dashboard-status')).toContainText('Open Finance sincronizado');
   await expect(page.locator('#of-accounts-list')).toContainText('Nubank');

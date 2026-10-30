@@ -12,6 +12,22 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Entrega Meu Pluggy e correções da sincronização Pluggy — 30/10/2026
+
+Contexto: a Pluggy não aprovou produção para o titular. O caminho adotado é o **Meu Pluggy** (uso pessoal, gratuito, sem due diligence, até 5 conexões, dados reais; atualização a cada 24 h; autorização de 1 ano). O titular já conectou Nubank, Itaú e Santander e três cartões no meu.pluggy.ai. Passo a passo em `docs/meu-pluggy.md`.
+
+Implementado (commit local, sem push nem deploy):
+- `ItemPluggy` + migração `V5__item_pluggy.sql`: itens vinculados com apelido, instituição, status, validade da autorização, última sincronização e último erro.
+- Endpoints: `GET /api/open-finance/itens`, `POST /api/open-finance/itens` (`{itemId, nome}`; vincula e sincroniza), `POST /api/open-finance/sincronizar-todos?apenasDesatualizados=`. Erros da Pluggy retornam 502 com `{"erro"}` legível; entrada inválida, 422.
+- Correções na sincronização real (eram bugs que afetariam dados reais): tipo pela `type` DEBIT/CREDIT (no cartão a Pluggy envia compras com valor positivo; antes viravam ENTRADA); paginação de transações e investimentos (`pageSize=500`; antes só a primeira página); pagamentos de fatura e "Same person transfer" ignorados; nome do banco pelo apelido ou `GET /items/{id}` (o objeto Account não tem `connector`); rótulo "Banco · cartão 1234"; datas UTC com horário convertidas para Brasília (meia-noite UTC mantida como data); `amountInAccountCurrency`; investimentos zerados/resgatados ignorados e tipos mapeados para RENDA_FIXA/ACOES/FUNDOS/OUTROS.
+- HTTP e categorização fora da transação; gravação em `TransactionTemplate` com cache de ids e de linhas legadas por dia. Categorização compartilhada em `importacao/CategorizadorLancamentos` (histórico > regras > Gemini em lote), usada também pelo importador OFX/CSV.
+- Janela: 90 dias na primeira sincronização do item, 35 nas seguintes.
+- PWA: seção "Meu Pluggy" no diálogo Open Finance (Item ID + nome, lista de itens com status, desvincular, sincronizar todos); Pluggy Connect e Sandbox movidos para "Outras formas de conectar"; sincronização automática em segundo plano ao entrar se algum item tiver mais de 6 h.
+
+Verificado: 67 testes de backend (PluggySincronizacaoTest 19, com stub da Pluggy incluindo paginação, cartão, fatura, item e erros) e 9 E2E aprovados; diálogo em 375 px sem overflow. **Não verificado com a API real da Pluggy/Meu Pluggy.**
+
+Pendente do titular: criar `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET` no Render (nunca na conversa), backup do Neon, push/deploy (Flyway V2–V5), copiar os Item IDs do painel e vincular no app; conferir na primeira sincronização sinais do cartão, fatura, datas e eventual duplicidade de lançamentos pendentes.
+
 ## Entrega Importação de Extratos e Faturas (OFX/CSV) — 30/10/2026
 
 Objetivo: dados reais de bancos e cartões sem depender do contrato de produção da Pluggy. O titular exporta o extrato/fatura no banco e importa no Clareza. Guia de uso e API em `docs/importacao.md`.

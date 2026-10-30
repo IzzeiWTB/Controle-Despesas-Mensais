@@ -17,7 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
         "pluggy.client.secret="
 })
 class MigracaoFlywayTest {
-    static final String VERSAO_ATUAL = "4";
+    static final String VERSAO_ATUAL = "5";
 
     @Autowired Flyway flyway;
 

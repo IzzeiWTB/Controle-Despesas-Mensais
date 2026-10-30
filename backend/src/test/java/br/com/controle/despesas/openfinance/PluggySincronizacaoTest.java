@@ -54,7 +54,12 @@ class PluggySincronizacaoTest {
             server.createContext("/transactions", ex -> {
                 String query = ex.getRequestURI().getQuery();
                 String conta = query.substring(query.indexOf("accountId=") + 10).split("&")[0];
-                responder(ex, 200, RESPOSTAS.getOrDefault("transactions:" + conta, "{\"results\":[]}"));
+                String pagina = query.contains("page=2") ? ":p2" : "";
+                responder(ex, 200, RESPOSTAS.getOrDefault("transactions:" + conta + pagina, "{\"results\":[]}"));
+            });
+            server.createContext("/items/", ex -> {
+                String corpo = RESPOSTAS.get("item");
+                responder(ex, corpo == null ? 404 : 200, corpo == null ? "{}" : corpo);
             });
             server.start();
             return server;
@@ -83,6 +88,7 @@ class PluggySincronizacaoTest {
     @Autowired ContaConectadaRepository contas;
     @Autowired InvestimentoRepository investimentos;
     @Autowired MovimentacaoRepository movimentacoes;
+    @Autowired ItemPluggyRepository itens;
 
     private static final String CONTA_BANCO = "{\"id\":\"acc-1\",\"name\":\"Conta Corrente\",\"type\":\"BANK\",\"balance\":100.555,\"connector\":{\"name\":\"Pluggy Bank\"}}";
     private static final String CONTA_CARTAO = "{\"id\":\"acc-2\",\"name\":\"Cartao\",\"type\":\"CREDIT\",\"balance\":250.1,\"creditData\":{\"creditLimit\":5000},\"connector\":{\"name\":\"Pluggy Bank\"}}";
@@ -100,6 +106,7 @@ class PluggySincronizacaoTest {
         movimentacoes.deleteAll();
         contas.deleteAll();
         investimentos.deleteAll();
+        itens.deleteAll();
         RESPOSTAS.clear();
         statusContas = 200;
         definir("accounts", CONTA_BANCO, CONTA_CARTAO);
@@ -267,5 +274,117 @@ class PluggySincronizacaoTest {
         assertEquals(2, contas.count());
         assertEquals(1, investimentos.count());
         assertTrue(contas.findByItemId("mock-sandbox-item").isEmpty());
+    }
+
+    private static String txCompleta(String id, String descricao, double valor, String tipo, String data, String categoria) {
+        return "{\"id\":\"" + id + "\",\"description\":\"" + descricao + "\",\"amount\":" + valor + ",\"type\":\"" + tipo
+                + "\",\"date\":\"" + data + "\"" + (categoria == null ? "" : ",\"category\":\"" + categoria + "\"") + "}";
+    }
+
+    private Movimentacao porDescricao(String descricao) {
+        return movimentacoes.findAll().stream().filter(m -> m.getDescricao().equals(descricao)).findFirst().orElseThrow();
+    }
+
+    @Test void compraNoCartaoComValorPositivoEhDespesaEPagamentoDeFaturaEhIgnorado() {
+        definir("transactions:acc-2",
+                txCompleta("c1", "Uber Trip", 32.90, "DEBIT", "2026-10-11T00:00:00.000Z", null),
+                txCompleta("c2", "Estorno loja", -15.00, "CREDIT", "2026-10-12T00:00:00.000Z", null),
+                txCompleta("c3", "Pagamento recebido", -800.00, "CREDIT", "2026-10-13T00:00:00.000Z", null),
+                tx("c4", "Padaria sem type", 12.00, "2026-10-14"));
+        definir("transactions:acc-1",
+                txCompleta("b1", "Pagamento de fatura", -800.00, "DEBIT", "2026-10-13T00:00:00.000Z", null),
+                txCompleta("b2", "Pix para minha conta", -50.00, "DEBIT", "2026-10-13T00:00:00.000Z", "Same person transfer"),
+                txCompleta("b3", "Conta de luz", -120.00, "DEBIT", "2026-10-13T00:00:00.000Z", null));
+
+        Map<String, Object> r = sincronizar("item-real");
+        assertEquals(4, r.get("transacoesImportadas"));
+        assertEquals(3, r.get("transacoesIgnoradas"));
+        assertEquals("SAIDA", porDescricao("Uber Trip").getTipo());
+        assertEquals("Transporte", porDescricao("Uber Trip").getCategoria());
+        assertEquals("ENTRADA", porDescricao("Estorno loja").getTipo());
+        assertEquals("SAIDA", porDescricao("Padaria sem type").getTipo());
+        assertEquals("SAIDA", porDescricao("Conta de luz").getTipo());
+        assertTrue(movimentacoes.findAll().stream().noneMatch(m -> m.getDescricao().startsWith("Pagamento")));
+    }
+
+    @Test void percorreTodasAsPaginasDeTransacoes() {
+        RESPOSTAS.put("transactions:acc-1", "{\"page\":1,\"totalPages\":2,\"results\":[" + tx("p1", "Mercado A", -5.00, "2026-10-10") + "]}");
+        RESPOSTAS.put("transactions:acc-1:p2", "{\"page\":2,\"totalPages\":2,\"results\":[" + tx("p2", "Mercado B", -6.00, "2026-10-10") + "]}");
+        assertEquals(2, sincronizar("item-real").get("transacoesImportadas"));
+        assertTrue(movimentacoes.existsByIdExterno("pluggy:p2"));
+    }
+
+    @Test void nomeDoBancoVemDoApelidoOuDoItemEContaDoCartaoIdentificada() {
+        RESPOSTAS.put("item", "{\"id\":\"item-real\",\"status\":\"UPDATED\",\"connector\":{\"name\":\"MeuPluggy\"},\"consentExpiresAt\":\"2027-10-30T12:00:00.000Z\"}");
+        RESPOSTAS.put("accounts", "{\"results\":[" + CONTA_BANCO + ","
+                + "{\"id\":\"acc-2\",\"name\":\"FREE MASTERCARD\",\"number\":\"4177\",\"type\":\"CREDIT\",\"balance\":932.12,\"creditData\":{\"creditLimit\":5612}}]}");
+        definir("transactions:acc-2", txCompleta("c1", "Netflix", 55.90, "DEBIT", "2026-10-11T00:00:00.000Z", null));
+        ItemPluggy vinculado = new ItemPluggy("item-real", java.time.LocalDateTime.now());
+        vinculado.setNome("Santander");
+        itens.save(vinculado);
+
+        sincronizar("item-real");
+        ItemPluggy item = itens.findById("item-real").orElseThrow();
+        assertEquals("Santander", item.getRotulo());
+        assertEquals("UPDATED", item.getStatusPluggy());
+        assertEquals(2027, item.getConsentimentoExpiraEm().getYear());
+        assertTrue(item.getUltimaSincronizacao() != null);
+        assertEquals("Santander · cartão 4177", porDescricao("Netflix").getConta());
+        assertEquals("Santander", contas.findByItemIdAndIdExterno("item-real", "acc-2").orElseThrow().getInstituicao());
+    }
+
+    @Test void datasComHorarioUsamFusoDeBrasiliaEDatasSemHorarioSaoMantidas() {
+        java.time.ZoneId sp = java.time.ZoneId.of("America/Sao_Paulo");
+        assertEquals(LocalDate.parse("2026-10-10"), PluggyService.dataTransacao("2026-10-10T00:00:00.000Z", sp));
+        assertEquals(LocalDate.parse("2026-10-10"), PluggyService.dataTransacao("2026-10-11T01:30:00.000Z", sp));
+        assertEquals(LocalDate.parse("2026-10-11"), PluggyService.dataTransacao("2026-10-11T15:00:00.000Z", sp));
+        assertEquals(null, PluggyService.dataTransacao("", sp));
+    }
+
+    @Test void vincularItemSincronizaEListaComUltimaSincronizacao() throws Exception {
+        mvc.perform(post("/api/open-finance/itens").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itemId\":\"item-real\",\"nome\":\"Nubank\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.instituicao").value("Nubank"))
+                .andExpect(jsonPath("$.transacoesImportadas").value(2));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/open-finance/itens").header("X-API-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].itemId").value("item-real"))
+                .andExpect(jsonPath("$[0].rotulo").value("Nubank"))
+                .andExpect(jsonPath("$[0].ultimaSincronizacao").exists());
+
+        for (String corpo : List.of("{\"itemId\":\"curto\"}", "{\"itemId\":\"mock-sandbox-item\"}", "{\"itemId\":\"id com espaco\"}")) {
+            mvc.perform(post("/api/open-finance/itens").header("X-API-Key", KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.erro").exists());
+        }
+    }
+
+    @Test void sincronizarTodosPulaRecentesERegistraErro() throws Exception {
+        sincronizar("item-real");
+        itens.save(new ItemPluggy("item-com-erro", java.time.LocalDateTime.now()));
+
+        mvc.perform(post("/api/open-finance/sincronizar-todos").param("apenasDesatualizados", "true").header("X-API-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sincronizados").value(1))
+                .andExpect(jsonPath("$.itens.length()").value(1))
+                .andExpect(jsonPath("$.itens[0].itemId").value("item-com-erro"));
+
+        statusContas = 500;
+        mvc.perform(post("/api/open-finance/sincronizar-todos").header("X-API-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.falhas").value(2))
+                .andExpect(jsonPath("$.itens[0].erro").exists());
+        assertTrue(itens.findById("item-real").orElseThrow().getUltimoErro().contains("HTTP 500"));
+        assertEquals(2, movimentacoes.count());
+    }
+
+    @Test void falhaRetornaMensagemLegivel() throws Exception {
+        statusContas = 500;
+        mvc.perform(post("/api/open-finance/sincronizar").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itemId\":\"item-real\"}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.erro").value(org.hamcrest.Matchers.containsString("HTTP 500")));
     }
 }

@@ -2,17 +2,14 @@ package br.com.controle.despesas.importacao;
 
 import br.com.controle.despesas.Movimentacao;
 import br.com.controle.despesas.MovimentacaoRepository;
-import br.com.controle.despesas.ia.GeminiService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.regex.Pattern;
 
 /**
  * Importa extratos e faturas (OFX/CSV) exportados pelo proprio banco.
@@ -27,9 +24,6 @@ public class ImportacaoService {
     private static final int TAMANHO_DESCRICAO = 100;
     private static final int TAMANHO_CONTA = 60;
     private static final int LOTE_CONSULTA = 500;
-    private static final Pattern PAGAMENTO_FATURA = Pattern.compile(
-            "\\b(pagamento recebido|pagamento (de |da |do )?fatura|pagto (de |da )?fatura|pgto (de |da )?fatura"
-                    + "|pag fatura|pagamento (do |de )?cartao|pagto cartao|fatura (do )?cartao)\\b");
 
     public enum Status { NOVO, JA_IMPORTADO, POSSIVEL_DUPLICADO, PAGAMENTO_FATURA }
 
@@ -43,13 +37,11 @@ public class ImportacaoService {
                          boolean incluirPossiveisDuplicados, boolean incluirPagamentosFatura) {}
 
     private final MovimentacaoRepository repository;
-    private final GeminiService gemini;
-    private final Clock clock;
+    private final CategorizadorLancamentos categorizador;
 
-    public ImportacaoService(MovimentacaoRepository repository, GeminiService gemini, Clock clock) {
+    public ImportacaoService(MovimentacaoRepository repository, CategorizadorLancamentos categorizador) {
         this.repository = repository;
-        this.gemini = gemini;
-        this.clock = clock;
+        this.categorizador = categorizador;
     }
 
     /** Sem transacao propria: leitura e categorizacao (inclusive Gemini) ficam fora; saveAll e atomico. */
@@ -66,14 +58,17 @@ public class ImportacaoService {
         for (int i = 0; i < lancamentos.size(); i++) {
             ExtratoParser.Lancamento l = lancamentos.get(i);
             if (jaExistentes.contains(ids.get(i))) { status.add(Status.JA_IMPORTADO); continue; }
-            if (PAGAMENTO_FATURA.matcher(ExtratoParser.normalizar(l.descricao())).find()) { status.add(Status.PAGAMENTO_FATURA); continue; }
+            if (CategorizadorLancamentos.ehPagamentoFatura(l.descricao())) { status.add(Status.PAGAMENTO_FATURA); continue; }
             String chave = chaveSemelhanca(l.data(), l.valor(), l.tipo());
             int restantes = semelhantes.getOrDefault(chave, 0);
             if (restantes > 0) { semelhantes.put(chave, restantes - 1); status.add(Status.POSSIVEL_DUPLICADO); }
             else status.add(Status.NOVO);
         }
 
-        List<String> categorias = categorizar(lancamentos, status);
+        List<String> categorias = categorizador.categorizar(
+                lancamentos.stream().map(ExtratoParser.Lancamento::descricao).toList(),
+                lancamentos.stream().map(ExtratoParser.Lancamento::tipo).toList(),
+                i -> status.get(i) != Status.JA_IMPORTADO);
 
         List<Movimentacao> novas = new ArrayList<>();
         LocalDate maisRecente = null;
@@ -169,38 +164,6 @@ public class ImportacaoService {
 
     private static String chaveSemelhanca(LocalDate data, BigDecimal valor, String tipo) {
         return data + "|" + valor.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() + "|" + tipo;
-    }
-
-    /** Historico do usuario (descricao igual, ultimos 400 dias) > regras locais > Gemini em lote para o que sobrar. */
-    private List<String> categorizar(List<ExtratoParser.Lancamento> lancamentos, List<Status> status) {
-        LocalDate hoje = LocalDate.now(clock);
-        Map<String, String> historico = new HashMap<>();
-        for (Movimentacao m : repository.findByDataBetweenOrderByDataDesc(hoje.minusDays(400), hoje.plusDays(31))) {
-            if (m.getCategoria() != null && !"Outros".equals(m.getCategoria())) {
-                historico.putIfAbsent(ExtratoParser.normalizar(m.getDescricao()), m.getCategoria());
-            }
-        }
-        List<String> categorias = new ArrayList<>(lancamentos.size());
-        List<String> pendentes = new ArrayList<>();
-        for (int i = 0; i < lancamentos.size(); i++) {
-            ExtratoParser.Lancamento l = lancamentos.get(i);
-            String cat = historico.get(ExtratoParser.normalizar(l.descricao()));
-            if (cat == null) cat = GeminiService.categorizarHeuristica(l.descricao());
-            if ("Salário".equals(cat) && "SAIDA".equals(l.tipo())) cat = "Outros";
-            categorias.add(cat);
-            if ("Outros".equals(cat) && status.get(i) != Status.JA_IMPORTADO) pendentes.add(l.descricao());
-        }
-        if (!pendentes.isEmpty()) {
-            Map<String, String> ia = gemini.categorizarLote(pendentes);
-            for (int i = 0; i < lancamentos.size(); i++) {
-                String sugerida = ia.get(lancamentos.get(i).descricao());
-                if (sugerida != null && "Outros".equals(categorias.get(i))
-                        && !("Salário".equals(sugerida) && "SAIDA".equals(lancamentos.get(i).tipo()))) {
-                    categorias.set(i, sugerida);
-                }
-            }
-        }
-        return categorias;
     }
 
     private static int contar(List<Status> status, Status alvo) {

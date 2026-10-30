@@ -15,3 +15,9 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #63
 .import-item .of-tag{justify-self:end}
 .of-tag.warn{background:#faece6;color:var(--orange)}
 .of-tag.muted-tag{background:var(--line);color:var(--muted)}
+.of-meupluggy{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--cream)}
+.of-meupluggy .kicker,.of-meupluggy p{margin:0}
+.of-items .account-item{gap:10px}
+.of-items .account-item>div{display:grid;min-width:0}
+.of-items .account-item small{overflow-wrap:anywhere}
+.of-more summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--forest)}

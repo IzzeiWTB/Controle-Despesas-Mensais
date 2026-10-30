@@ -4,6 +4,7 @@ const $ = selector => document.querySelector(selector);
 const nativeAndroid = window.Capacitor?.isNativePlatform?.() === true;
 const CATEGORIES = ['Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Lazer', 'Assinaturas', 'Salário', 'Outros'];
 const ICONS = { Alimentação: '⌁', Transporte: '↗', Moradia: '⌂', Saúde: '✚', Lazer: '◌', Assinaturas: '◇', Salário: '↓', Outros: '·' };
+const INVESTMENT_TYPES = { RENDA_FIXA: 'Renda fixa', ACOES: 'Ações', FUNDOS: 'Fundos', CRIPTO: 'Cripto', OUTROS: 'Outros' };
 const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const pad = number => String(number).padStart(2, '0');
 const localDate = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -15,7 +16,7 @@ const DEFAULT_API = configured ? new URL(configured, location.href).href : 'http
 let apiUrl = readStorage(sessionStorage, 'clareza-api-url', DEFAULT_API);
 let apiKey = readStorage(sessionStorage, 'clareza-api-key');
 let privacyMode = readStorage(localStorage, 'clareza-privacy-mode') === 'true';
-let movements = [], budgets = {}, goals = [], ofAccounts = [], ofInvestments = [], editingId = null, editingGoalId = null, deferredInstallPrompt;
+let movements = [], budgets = {}, goals = [], ofAccounts = [], ofInvestments = [], ofItems = [], editingId = null, editingGoalId = null, deferredInstallPrompt;
 let loadedPeriod = null, loadVersion = 0, saving = false, exporting = false;
 const money = value => privacyMode ? '••••••' : formatter.format(value || 0);
 const cents = value => Math.round(Number(value) * 100);
@@ -62,14 +63,15 @@ async function request(path, options = {}) {
         endSession();
         throw new Error('Chave inválida ou expirada. Entre novamente.');
       }
-      if (response.status === 413 || response.status === 422) {
+      if ([413, 422, 502].includes(response.status)) {
         const body = await response.json().catch(() => null);
-        throw new Error(body?.erro || 'Arquivo não reconhecido. Use um extrato OFX ou CSV exportado pelo banco.');
+        if (body?.erro) throw new Error(body.erro);
+        if (response.status === 502) throw new Error('A conexão bancária (Pluggy) falhou ou não está configurada. Nenhum dado fictício foi criado; tente novamente.');
+        throw new Error('Arquivo não reconhecido. Use um extrato OFX ou CSV exportado pelo banco.');
       }
       if (response.status === 400) throw new Error('Revise os campos: descrição, data, categoria e valor com até duas casas decimais.');
       if (response.status === 404) throw new Error('Registro ou endereço não encontrado. Atualize a lista.');
       if (response.status === 409) throw new Error('A operação já foi realizada por outra requisição. Atualize a lista.');
-      if (response.status === 502) throw new Error('A conexão bancária (Pluggy) falhou ou não está configurada. Nenhum dado fictício foi criado; tente novamente ou use o modo Sandbox.');
       throw new Error(`O servidor não concluiu a operação (${response.status}). Tente novamente.`);
     }
     return response.status === 204 ? null : await response.json();
@@ -115,7 +117,9 @@ async function load() {
       ofAccounts = Array.isArray(accs) ? accs : [];
       const invs = await request('/open-finance/investimentos');
       ofInvestments = Array.isArray(invs) ? invs : [];
-    } catch { ofAccounts = []; ofInvestments = []; }
+      const linked = await request('/open-finance/itens');
+      ofItems = Array.isArray(linked) ? linked : [];
+    } catch { ofAccounts = []; ofInvestments = []; ofItems = []; }
     loadedPeriod = period;
     render();
     status(`${items.length} lançamento(s) em ${monthName(period)}. Dados atualizados.`);
@@ -264,7 +268,7 @@ function renderOpenFinance() {
             <strong>${clean(inv.instituicao)}</strong>
             <small class="muted" style="display:block">${clean(inv.nome)}</small>
           </div>
-          <span class="of-tag inv">${clean(inv.tipo || 'INVESTIMENTO')}</span>
+          <span class="of-tag inv">${clean(INVESTMENT_TYPES[inv.tipo] || inv.tipo || 'Investimento')}</span>
         </div>
         <div class="goal-values" style="margin-top:8px">
           <span>Posição: <strong>${money(inv.valorInvestido || 0)}</strong>${rentab}</span>
@@ -303,6 +307,7 @@ function endSession() {
   goals = [];
   ofAccounts = [];
   ofInvestments = [];
+  ofItems = [];
   loadedPeriod = null;
   $('#api-key').value = '';
   $('#dashboard').classList.add('hidden');
@@ -328,6 +333,7 @@ async function connect() {
     $('#access-error').textContent = '';
     $('#access').classList.add('hidden');
     for (const id of ['dashboard', 'privacy', 'logout']) $(`#${id}`).classList.remove('hidden');
+    autoSync();
   } catch (error) { $('#access-error').textContent = error.message; }
   finally { button.disabled = false; }
 }
@@ -571,9 +577,105 @@ $('#ai-insight-btn').onclick = async () => {
     btn.textContent = originalText;
   }
 };
+const dateTime = value => new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+function renderOfItems() {
+  $('#sync-all-btn').classList.toggle('hidden', !ofItems.length);
+  $('#of-items').innerHTML = ofItems.map(item => {
+    const info = item.ultimoErro ? `<small class="danger">${clean(item.ultimoErro)}</small>`
+      : item.ultimaSincronizacao ? `<small>Sincronizado em ${dateTime(item.ultimaSincronizacao)}${item.consentimentoExpiraEm ? ` · autorização até ${new Date(item.consentimentoExpiraEm).toLocaleDateString('pt-BR')}` : ''}</small>`
+      : '<small>Ainda não sincronizado</small>';
+    return `<div class="account-item"><div><strong>${clean(item.rotulo)}</strong>${info}</div><button type="button" class="text-action" data-remove-item="${clean(item.itemId)}" aria-label="Desvincular ${clean(item.rotulo)}">Desvincular</button></div>`;
+  }).join('');
+}
+function syncSummary(res) {
+  const failures = (res?.itens || []).filter(item => !item.ok);
+  let message = `${res?.sincronizados || 0} banco(s) sincronizado(s), ${res?.transacoesImportadas || 0} lançamento(s) novo(s).`;
+  if (failures.length) message += ` Falha em ${failures.map(item => item.nome).join(', ')}: ${failures[0].erro}`;
+  return message;
+}
+async function refreshOfItems() {
+  try { const items = await request('/open-finance/itens'); ofItems = Array.isArray(items) ? items : []; } catch { /* keep current list */ }
+  renderOfItems();
+}
+let autoSyncing = false;
+/** Ao entrar, atualiza em segundo plano os bancos vinculados há mais de 6 horas (o Meu Pluggy atualiza a cada 24 h). */
+async function autoSync() {
+  const stale = ofItems.some(item => !item.ultimaSincronizacao || Date.now() - new Date(item.ultimaSincronizacao).getTime() > 6 * 3600 * 1000);
+  if (autoSyncing || !stale) return;
+  autoSyncing = true;
+  status('Atualizando seus bancos em segundo plano…');
+  try {
+    const res = await request('/open-finance/sincronizar-todos?apenasDesatualizados=true', { method: 'POST' });
+    if (!apiKey) return;
+    try { await load(); } catch { return; }
+    status(syncSummary(res), res.falhas > 0);
+  } catch (error) {
+    if (apiKey) status(`Não foi possível atualizar os bancos: ${error.message}`, true);
+  } finally { autoSyncing = false; }
+}
 $('#open-finance-btn').onclick = () => {
   $('#of-error').textContent = '';
+  $('#of-info').textContent = '';
+  renderOfItems();
   $('#of-dialog').showModal();
+};
+$('#link-item-btn').onclick = async () => {
+  if (saving) return;
+  const itemId = $('#of-item-id').value.trim(), nome = $('#of-item-nome').value.trim();
+  if (!itemId) { $('#of-error').textContent = 'Cole o Item ID copiado do painel da Pluggy.'; return; }
+  saving = true;
+  $('#link-item-btn').disabled = true;
+  $('#of-error').textContent = '';
+  $('#of-info').textContent = 'Vinculando e sincronizando… pode levar até um minuto.';
+  try {
+    const res = await request('/open-finance/itens', { method: 'POST', body: JSON.stringify({ itemId, nome }) });
+    $('#of-item-id').value = '';
+    $('#of-item-nome').value = '';
+    $('#of-info').textContent = `${res.instituicao}: ${res.contasSincronizadas} conta(s) e cartão(ões), ${res.investimentosSincronizados} investimento(s) e ${res.transacoesImportadas} lançamento(s) importado(s).`;
+    try { await load(); } catch { /* status shows the error */ }
+  } catch (error) {
+    $('#of-info').textContent = '';
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    $('#link-item-btn').disabled = false;
+    await refreshOfItems();
+  }
+};
+$('#sync-all-btn').onclick = async () => {
+  if (saving) return;
+  saving = true;
+  $('#sync-all-btn').disabled = true;
+  $('#of-error').textContent = '';
+  $('#of-info').textContent = 'Sincronizando todos os bancos…';
+  try {
+    const res = await request('/open-finance/sincronizar-todos', { method: 'POST' });
+    $('#of-info').textContent = syncSummary(res);
+    try { await load(); } catch { /* status shows the error */ }
+  } catch (error) {
+    $('#of-info').textContent = '';
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    $('#sync-all-btn').disabled = false;
+    await refreshOfItems();
+  }
+};
+$('#of-items').onclick = async event => {
+  const button = event.target.closest('[data-remove-item]');
+  if (!button || saving) return;
+  if (!confirm('Desvincular este banco? Contas, cartões e investimentos dele saem do Clareza; os lançamentos já importados são mantidos.')) return;
+  saving = true;
+  button.disabled = true;
+  try {
+    await request(`/open-finance/itens/${encodeURIComponent(button.dataset.removeItem)}`, { method: 'DELETE' });
+    try { await load(); } catch { /* status shows the error */ }
+  } catch (error) {
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    await refreshOfItems();
+  }
 };
 $('#close-of').onclick = () => {
   if (!saving) $('#of-dialog').close();
