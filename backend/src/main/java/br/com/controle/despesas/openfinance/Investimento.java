@@ -35,17 +35,26 @@ public class Investimento {
 
     @NotNull
     @DecimalMin("0.00")
+    @Column(precision = 38, scale = 2)
     private BigDecimal valorInvestido;
 
+    @Column(precision = 38, scale = 2)
     private BigDecimal rentabilidade;
 
     @NotNull
     private LocalDateTime atualizadoEm;
 
+    @Column(name = "id_externo", length = 100)
+    private String idExterno;
+
     @PrePersist
-    @PreUpdate
-    void antesDeSalvar() {
+    void aoCriar() {
         if (atualizadoEm == null) atualizadoEm = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    void aoAtualizar() {
+        atualizadoEm = LocalDateTime.now();
     }
 
     public UUID getId() { return id; }
@@ -61,6 +70,8 @@ public class Investimento {
     public void setValorInvestido(BigDecimal valorInvestido) { this.valorInvestido = valorInvestido; }
     public BigDecimal getRentabilidade() { return rentabilidade; }
     public void setRentabilidade(BigDecimal rentabilidade) { this.rentabilidade = rentabilidade; }
+    public String getIdExterno() { return idExterno; }
+    public void setIdExterno(String idExterno) { this.idExterno = idExterno; }
     public LocalDateTime getAtualizadoEm() { return atualizadoEm; }
     public void setAtualizadoEm(LocalDateTime atualizadoEm) { this.atualizadoEm = atualizadoEm; }
 }

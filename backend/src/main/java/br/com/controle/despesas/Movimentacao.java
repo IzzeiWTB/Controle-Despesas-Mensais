@@ -1,10 +1,11 @@
 package br.com.controle.despesas;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +29,7 @@ public class Movimentacao {
     @NotNull
     @DecimalMin(value = "0.01")
     @Digits(integer = 12, fraction = 2)
+    @Column(precision = 38, scale = 2)
     private BigDecimal valor;
 
     @NotNull
@@ -45,10 +47,13 @@ public class Movimentacao {
     private String conta;
     private boolean recorrente;
 
-    @PrePersist
-    void preencherData() {
-        if (data == null) data = LocalDate.now();
-    }
+    /** Identificador do lancamento no provedor externo (Pluggy). Somente leitura para o cliente. */
+    @Column(name = "id_externo", length = 120, unique = true)
+    private String idExterno;
+
+    /** Lancamento recorrente que originou este clone. Somente leitura para o cliente. */
+    @Column(name = "recorrencia_origem_id", unique = true)
+    private UUID recorrenciaOrigemId;
 
     public UUID getId() { return id; }
     public String getDescricao() { return descricao; }
@@ -65,4 +70,10 @@ public class Movimentacao {
     public void setConta(String conta) { this.conta = conta; }
     public boolean isRecorrente() { return recorrente; }
     public void setRecorrente(boolean recorrente) { this.recorrente = recorrente; }
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    public String getIdExterno() { return idExterno; }
+    public void setIdExterno(String idExterno) { this.idExterno = idExterno; }
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    public UUID getRecorrenciaOrigemId() { return recorrenciaOrigemId; }
+    public void setRecorrenciaOrigemId(UUID recorrenciaOrigemId) { this.recorrenciaOrigemId = recorrenciaOrigemId; }
 }

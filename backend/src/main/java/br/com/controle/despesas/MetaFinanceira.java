@@ -1,5 +1,6 @@
 package br.com.controle.despesas;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,11 +30,13 @@ public class MetaFinanceira {
     @NotNull
     @DecimalMin(value = "0.01")
     @Digits(integer = 12, fraction = 2)
+    @Column(precision = 38, scale = 2)
     private BigDecimal valorAlvo;
 
     @NotNull
     @DecimalMin(value = "0.00")
     @Digits(integer = 12, fraction = 2)
+    @Column(precision = 38, scale = 2)
     private BigDecimal valorAtual;
 
     private LocalDate prazo;

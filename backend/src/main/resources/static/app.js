@@ -64,6 +64,8 @@ async function request(path, options = {}) {
       }
       if (response.status === 400) throw new Error('Revise os campos: descrição, data, categoria e valor com até duas casas decimais.');
       if (response.status === 404) throw new Error('Registro ou endereço não encontrado. Atualize a lista.');
+      if (response.status === 409) throw new Error('A operação já foi realizada por outra requisição. Atualize a lista.');
+      if (response.status === 502) throw new Error('A conexão bancária (Pluggy) falhou ou não está configurada. Nenhum dado fictício foi criado; tente novamente ou use o modo Sandbox.');
       throw new Error(`O servidor não concluiu a operação (${response.status}). Tente novamente.`);
     }
     return response.status === 204 ? null : await response.json();

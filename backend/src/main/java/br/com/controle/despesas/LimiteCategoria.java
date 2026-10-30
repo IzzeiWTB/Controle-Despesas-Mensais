@@ -23,6 +23,7 @@ public class LimiteCategoria {
     @NotNull
     @DecimalMin(value = "0.00")
     @Digits(integer = 12, fraction = 2)
+    @Column(precision = 38, scale = 2)
     private BigDecimal limite;
 
     public LimiteCategoria() {}

@@ -20,13 +20,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "APP_API_KEY=integration-test-only",
         "spring.datasource.url=jdbc:h2:mem:clareza-test;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
+        "gemini.api.key=",
+        "pluggy.client.id=",
+        "pluggy.client.secret="
 })
 @AutoConfigureMockMvc
 @Transactional
 class ApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired jakarta.persistence.EntityManager em;
     private static final String KEY = "integration-test-only";
 
     private String payload(String type, String amount, String date) throws Exception {
@@ -268,5 +271,80 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(3))))
                 .andExpect(jsonPath("$[0].valorInvestido").isNotEmpty());
+    }
+
+    private String recorrente(String descricao, String data) throws Exception {
+        return json.writeValueAsString(Map.of("descricao", descricao, "valor", "45.90", "data", data,
+                "categoria", "Assinaturas", "tipo", "SAIDA", "conta", "Nubank", "recorrente", true));
+    }
+
+    private String criarRecorrente(String descricao, String data) throws Exception {
+        var res = mvc.perform(post("/api/movimentacoes").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(recorrente(descricao, data)))
+                .andExpect(status().isCreated()).andReturn();
+        return json.readTree(res.getResponse().getContentAsString()).get("id").asText();
+    }
+
+    @Test void duasRecorrentesIdenticasGeramDoisClones() throws Exception {
+        criarRecorrente("Assinatura Streaming", "2026-09-10");
+        criarRecorrente("Assinatura Streaming", "2026-09-10");
+        mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(2));
+        mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0));
+        mvc.perform(get("/api/movimentacoes?inicio=2026-10-01&fim=2026-10-31").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test void cloneEditadoNaoEhRecriadoAoRepetir() throws Exception {
+        criarRecorrente("Assinatura Streaming", "2026-09-10");
+        var res = mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$.criados").value(1)).andReturn();
+        String cloneId = json.readTree(res.getResponse().getContentAsString()).get("itens").get(0).get("id").asText();
+
+        mvc.perform(put("/api/movimentacoes/" + cloneId).header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "descricao", "Streaming (renomeado)", "valor", "59.90", "data", "2026-10-12",
+                                "categoria", "Lazer", "tipo", "SAIDA", "conta", "Nubank", "recorrente", true))))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0));
+        mvc.perform(get("/api/movimentacoes?inicio=2026-10-01&fim=2026-10-31").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test void cloneAntigoSemOrigemEhVinculadoEmVezDeDuplicado() throws Exception {
+        criarRecorrente("Assinatura Streaming", "2026-09-10");
+        criarRecorrente("Assinatura Streaming", "2026-10-10"); // clone legado: sem origem gravada
+        mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0));
+        mvc.perform(get("/api/movimentacoes?inicio=2026-10-01&fim=2026-10-31").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].recorrenciaOrigemId").isNotEmpty());
+    }
+
+    @Test void camposDeIntegracaoSaoSomenteLeituraParaOCliente() throws Exception {
+        String payload = json.writeValueAsString(Map.of("descricao", "Teste", "valor", "10.00", "data", "2026-10-16",
+                "categoria", "Outros", "tipo", "SAIDA", "recorrente", false,
+                "idExterno", "pluggy:forjado", "recorrenciaOrigemId", UUID.randomUUID().toString()));
+        mvc.perform(post("/api/movimentacoes").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.idExterno").doesNotExist())
+                .andExpect(jsonPath("$.recorrenciaOrigemId").doesNotExist());
+    }
+
+    @Test void excluirOrigemLimpaOVinculoDoClone() throws Exception {
+        String origemId = criarRecorrente("Assinatura Streaming", "2026-09-10");
+        mvc.perform(post("/api/movimentacoes/recorrencias?periodo=2026-10").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$.criados").value(1));
+        em.flush();
+        mvc.perform(delete("/api/movimentacoes/" + origemId).header("X-API-Key", KEY)).andExpect(status().isNoContent());
+        em.flush();
+        em.clear();
+        mvc.perform(get("/api/movimentacoes?inicio=2026-10-01&fim=2026-10-31").header("X-API-Key", KEY))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].recorrenciaOrigemId").doesNotExist());
     }
 }

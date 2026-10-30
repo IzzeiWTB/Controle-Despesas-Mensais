@@ -12,6 +12,37 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Entrega Arquitetura de Banco de Dados — 30/10/2026
+
+Objetivo: revisar a arquitetura de banco e corrigir integridade, deduplicação e gestão de esquema.
+
+Implementado nesta etapa (não commitado; no working tree da branch `appmod/java-upgrade-20260903013431`):
+- Flyway (`flyway-core` + `flyway-database-postgresql`) com migrações em `backend/src/main/resources/db/migration/`:
+  - `V1__esquema_inicial.sql`: baseline igual ao esquema que o Hibernate gerava.
+  - `V2__indices.sql`: índices em `movimentacao.data`, `conta_conectada.item_id` e `investimento.item_id`.
+  - `V3__ids_externos.sql`: `id_externo` anulável com UNIQUE em `movimentacao`; UNIQUE(`item_id`, `id_externo`) em `conta_conectada` e `investimento`.
+  - `V4__recorrencia_origem.sql`: `recorrencia_origem_id` UNIQUE com FK ON DELETE SET NULL.
+- `application.properties`: `ddl-auto=${JPA_DDL_AUTO:validate}`, `spring.flyway.baseline-on-migrate=true` e `baseline-version=1`. Bancos existentes recebem baseline e pulam a V1. `JPA_DDL_AUTO=none` é a válvula de escape no Render. Testes e `scripts/test-server.mjs` não usam mais `create-drop`; o esquema dos testes vem do Flyway.
+- Sincronização Pluggy idempotente: ids externos `pluggy:<id>` e `sandbox:<itemId>:<n>`; upsert de contas e investimentos por (itemId, idExterno); transação já importada não é reimportada, mesmo se editada; linhas legadas sem id recebem o id em vez de duplicar. URL configurável por `pluggy.api.url`.
+- Removido o fallback silencioso que gravava dados fictícios no livro-caixa real quando a Pluggy real falhava. Agora retorna 502 (`PluggyIndisponivelException`); itemId vazio ou inválido retorna 400; o fluxo explícito `mock-sandbox-item` foi preservado; remover item sandbox também apaga seus lançamentos fictícios.
+- Recorrentes robustos: vínculo com a origem; duas recorrentes idênticas geram dois clones; clone editado não é recriado; conflito retorna 409.
+- `atualizadoEm` renovado em todo update; `@Column(precision = 38, scale = 2)` nos campos monetários; valores do Pluggy arredondados HALF_UP; descrição importada truncada em 100 caracteres.
+- `faturaAtual` do cartão passou a usar `balance` (antes lia `balanceCloseDate`, que é uma data). Confirmar contra o JSON real da Pluggy.
+- `RelogioConfig` fornece `Clock` em `America/Sao_Paulo` para “hoje” e período padrão (antes dependia do fuso UTC do contêiner).
+- PWA: mensagens para respostas 502 e 409 em `private-app/app.js`, sincronizado para `backend/src/main/resources/static/`.
+
+Verificado (local, H2):
+- 43 testes de backend aprovados: ApiIntegrationTest 16, ApiKeyFilterTest 1, MigracaoFlywayTest 1, PersistenciaOpenFinanceTest 10, PluggySincronizacaoTest 12 e RelogioTest 3, com stub HTTP do JDK no lugar da Pluggy.
+- 8 testes E2E do Playwright aprovados; `node --check private-app/app.js`, `npm run check` e `git diff --check` sem erros.
+- Banco legado simulado em H2 em arquivo: baseline na versão 1 e V2–V4 aplicadas com `validate`. Não testado em PostgreSQL.
+
+Pendências antes do deploy (titular):
+- Fazer backup ou branch do Neon; comparar `pg_dump --schema-only` com a V1; acompanhar o primeiro boot (baseline 1 e V2–V4 nos logs).
+- Auditar dados de produção: valores distintos de `tipo`, duplicatas, lançamentos fictícios do antigo modo simulado (iFood, Uber, Posto, Drogaria, Netflix).
+- Validar sincronização Pluggy sandbox real (ids e campo `balance` de cartão).
+- Decisões de produto em aberto: tabela de categorias, FK de `conta` para `ContaConectada`, conciliação entre lançamento manual e importado, modo simulado em produção e remoção do `AnaliseController` legado.
+- Não feito: tirar chamadas HTTP/Gemini da transação de sincronização.
+
 ## Entrega Open Finance e Inteligência Artificial (Google Gemini + Pluggy) — 18/10/2026 a 20/10/2026
 
 Objetivo: capacitar o Clareza com conexão bancária automática via Open Finance (extrato unificado de contas, cartões de crédito e investimentos) e Inteligência Artificial generativa com Google Gemini para categorização preditiva e leitura analítica/acolhedora do mês.
@@ -66,7 +97,7 @@ Verificado:
 - Contêiner Android: `npm --prefix mobile run apk` executou `assembleDebug testDebugUnitTest lintDebug` com sucesso, gerando APK assinado em `mobile/artifacts/Clareza-1.0-debug.apk` (SHA-256 `3F99176C9817A50FC559D7591305530310A7B302A9245CDD46998D1E7E87E437`).
 
 Pendências atuais:
-- Investimentos e Open Finance não existem ainda.
+- Investimentos e Open Finance foram implementados na entrega seguinte (Pluggy).
 - As contas bancárias continuam sendo identificações nos lançamentos do mês, sem conciliação bancária externa automática.
 
 ## Entrega Android — 17/10/2026

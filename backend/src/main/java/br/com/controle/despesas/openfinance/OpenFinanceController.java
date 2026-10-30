@@ -2,6 +2,7 @@ package br.com.controle.despesas.openfinance;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,14 @@ public class OpenFinanceController {
     @PostMapping("/sincronizar")
     public Map<String, Object> sincronizar(@RequestBody(required = false) Map<String, String> body) {
         String itemId = body != null ? body.get("itemId") : null;
-        return pluggyService.sincronizarItem(itemId);
+        if (itemId == null || itemId.isBlank() || itemId.trim().length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "itemId obrigatorio (ate 100 caracteres)");
+        }
+        try {
+            return pluggyService.sincronizarItem(itemId);
+        } catch (PluggyIndisponivelException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, e.getMessage(), e);
+        }
     }
 
     @GetMapping("/contas")

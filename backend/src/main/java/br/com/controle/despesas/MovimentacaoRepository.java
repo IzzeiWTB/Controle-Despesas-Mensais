@@ -8,4 +8,9 @@ import java.util.UUID;
 public interface MovimentacaoRepository extends JpaRepository<Movimentacao, UUID> {
     List<Movimentacao> findByDataBetweenOrderByDataDesc(LocalDate inicio, LocalDate fim);
     List<Movimentacao> findByRecorrenteTrueAndDataBetweenOrderByDataAsc(LocalDate inicio, LocalDate fim);
+    boolean existsByIdExterno(String idExterno);
+    List<Movimentacao> findByDataAndIdExternoIsNull(LocalDate data);
+    boolean existsByRecorrenciaOrigemId(UUID recorrenciaOrigemId);
+
+    List<Movimentacao> findByIdExternoStartingWith(String prefixo);
 }

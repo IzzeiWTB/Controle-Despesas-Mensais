@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.LinkedHashMap;
@@ -25,15 +26,18 @@ public class IaController {
     private final MovimentacaoRepository movimentacaoRepository;
     private final LimiteCategoriaRepository limiteRepository;
     private final MetaFinanceiraRepository metaRepository;
+    private final Clock clock;
 
     public IaController(GeminiService geminiService,
                         MovimentacaoRepository movimentacaoRepository,
                         LimiteCategoriaRepository limiteRepository,
-                        MetaFinanceiraRepository metaRepository) {
+                        MetaFinanceiraRepository metaRepository,
+                        Clock clock) {
         this.geminiService = geminiService;
         this.movimentacaoRepository = movimentacaoRepository;
         this.limiteRepository = limiteRepository;
         this.metaRepository = metaRepository;
+        this.clock = clock;
     }
 
     @PostMapping("/categorizar")
@@ -49,7 +53,7 @@ public class IaController {
     public Map<String, Object> obterInsights(@RequestParam(required = false) String periodo) {
         YearMonth ym;
         try {
-            ym = (periodo != null && !periodo.isBlank()) ? YearMonth.parse(periodo) : YearMonth.now();
+            ym = (periodo != null && !periodo.isBlank()) ? YearMonth.parse(periodo) : YearMonth.now(clock);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Periodo invalido. Formato esperado: YYYY-MM");
         }

@@ -10,8 +10,7 @@ const child = spawn(java, ['-jar', 'backend/target/despesas-pessoais-0.0.1-SNAPS
     SPRING_DATASOURCE_URL: 'jdbc:h2:mem:clareza-browser;DB_CLOSE_DELAY=-1',
     SPRING_DATASOURCE_DRIVER: 'org.h2.Driver',
     SPRING_DATASOURCE_USERNAME: 'sa',
-    SPRING_DATASOURCE_PASSWORD: '',
-    SPRING_JPA_HIBERNATE_DDL_AUTO: 'create-drop'
+    SPRING_DATASOURCE_PASSWORD: ''
   }
 });
 child.on('exit', code => process.exit(code ?? 1));

@@ -32,17 +32,27 @@ public class ContaConectada {
     @Size(max = 30)
     private String tipo; // CORRENTE, CARTAO_CREDITO, POUPANCA, INVESTIMENTO
 
+    @Column(precision = 38, scale = 2)
     private BigDecimal saldo;
+    @Column(precision = 38, scale = 2)
     private BigDecimal limiteCredito;
+    @Column(precision = 38, scale = 2)
     private BigDecimal faturaAtual;
 
     @NotNull
     private LocalDateTime atualizadoEm;
 
+    @Column(name = "id_externo", length = 100)
+    private String idExterno;
+
     @PrePersist
-    @PreUpdate
-    void antesDeSalvar() {
+    void aoCriar() {
         if (atualizadoEm == null) atualizadoEm = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    void aoAtualizar() {
+        atualizadoEm = LocalDateTime.now();
     }
 
     public UUID getId() { return id; }
@@ -60,6 +70,8 @@ public class ContaConectada {
     public void setLimiteCredito(BigDecimal limiteCredito) { this.limiteCredito = limiteCredito; }
     public BigDecimal getFaturaAtual() { return faturaAtual; }
     public void setFaturaAtual(BigDecimal faturaAtual) { this.faturaAtual = faturaAtual; }
+    public String getIdExterno() { return idExterno; }
+    public void setIdExterno(String idExterno) { this.idExterno = idExterno; }
     public LocalDateTime getAtualizadoEm() { return atualizadoEm; }
     public void setAtualizadoEm(LocalDateTime atualizadoEm) { this.atualizadoEm = atualizadoEm; }
 }
