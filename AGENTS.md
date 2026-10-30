@@ -12,7 +12,7 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
-## Entrega Open Finance e Inteligência Artificial (Google Gemini + Pluggy) — 18/10/2026
+## Entrega Open Finance e Inteligência Artificial (Google Gemini + Pluggy) — 18/10/2026 a 20/10/2026
 
 Objetivo: capacitar o Clareza com conexão bancária automática via Open Finance (extrato unificado de contas, cartões de crédito e investimentos) e Inteligência Artificial generativa com Google Gemini para categorização preditiva e leitura analítica/acolhedora do mês.
 
@@ -21,6 +21,7 @@ Implementado nesta etapa:
   - Entidades JPA `ContaConectada` e `Investimento`, repositórios dedicados e serviço `PluggyService`.
   - Endpoints em `OpenFinanceController`: `GET /api/open-finance/contas`, `GET /api/open-finance/investimentos`, `POST /api/open-finance/sincronizar`, `POST /api/open-finance/connect-token` e `GET /api/open-finance/status`.
   - Suporte duplo: API real do Pluggy conectada via credenciais (`PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`) e modo Sandbox simulado quando desconfiguradas, permitindo testes sem credenciais bancárias de produção.
+  - Widget oficial **Pluggy Connect v2.5.0** integrado na interface para autenticação visual de bancos.
   - Sincronização automática que extrai contas, faturas e limites de cartão, posições consolidadas de investimentos (renda fixa, ações, índices) e transações dos últimos 30 dias que são categorizadas automaticamente pela IA e salvas nas movimentações do mês.
 - **Inteligência Artificial (Google Gemini)**:
   - `GeminiService` e `IaController`: `POST /api/ia/categorizar`, `GET /api/ia/insights?periodo=YYYY-MM` e `GET /api/ia/status`.
@@ -31,7 +32,8 @@ Implementado nesta etapa:
 - **Interface e PWA**:
   - Visão unificada de Contas e Cartões com faturas em aberto e limites de crédito.
   - Visão consolidada de Investimentos com totalização de patrimônio e rentabilidade.
-  - Modal de sincronização do Open Finance com retorno amigável e proteção contra múltiplos cliques.
+  - Modal de Open Finance aprimorado com dois fluxos claros: `✦ Conectar Banco Real (Pluggy Connect)` e `Simular Contas em Modo Sandbox (Teste)`.
+  - Cache do Service Worker avançado para `v4`.
 - **Responsividade e Estilos**:
   - Estilos dedicados (`.of-card`, `.of-tag`, `.ai-suggestions`) mantendo o design acolhedor do Clareza.
 
@@ -39,10 +41,12 @@ Verificado:
 - Doze testes de backend aprovados (`ApiIntegrationTest` e `ApiKeyFilterTest`).
 - Oito testes E2E do Playwright aprovados (`npm run test:e2e`), cobrindo login, CRUD, limites, metas, exportação CSV, responsividade mobile, IA e Open Finance.
 - Validação estática: `node --check private-app/app.js`, `npm run check` e `git diff --check` aprovados sem advertências.
-- Contêiner Android: `npm --prefix mobile run apk` executou `assembleDebug testDebugUnitTest lintDebug` com sucesso, gerando APK assinado em `mobile/artifacts/Clareza-1.0-debug.apk` (SHA-256 `21F6C5121689C97492DE4DC37EC523F615698A70B450734E20FFB9B1A58BF0A2`).
+- Contêiner Android: `npm --prefix mobile run apk` executou `assembleDebug testDebugUnitTest lintDebug` com sucesso, gerando APK assinado em `mobile/artifacts/Clareza-1.0-debug.apk` (SHA-256 `3873F9D1BADA6DB3DDB844C164EF372921CB5D740FE2D02F519A5FD482AF75CD`).
+- Deploy de produção verificado no Render e integrado ao repositório GitHub (`main`).
 
-Pendências atuais:
-- Conexão bancária de produção depende de cadastrar as chaves `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` e `GEMINI_API_KEY` no painel do Render. Em ambiente local/sem chaves, o Clareza funciona plenamente no modo Sandbox / heurístico.
+Limitações do agregador externo e próximos passos:
+- **Restrição de produção da Pluggy**: Chaves de desenvolvimento / trial da Pluggy permitem conexões apenas com conectores Sandbox (`Pluggy Bank`). Bancos reais (Itaú, Nubank, etc.) exigem aprovação cadastral e contratação comercial de produção junto à Pluggy.
+- **Alternativas diretas em avaliação**: Implementar importador de extratos/faturas com 1 clique via `.OFX` / `.CSV` com categorização do Gemini, e/ou leitor de notificações bancárias no Android (`NotificationListenerService`), oferecendo dados 100% reais sem dependência de agregadores comerciais regulados.
 
 ## Entrega Limites, Metas e Recorrência — 18/10/2026
 
