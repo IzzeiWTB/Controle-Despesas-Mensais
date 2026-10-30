@@ -12,11 +12,29 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Entrega Importação de Extratos e Faturas (OFX/CSV) — 30/10/2026
+
+Objetivo: dados reais de bancos e cartões sem depender do contrato de produção da Pluggy. O titular exporta o extrato/fatura no banco e importa no Clareza. Guia de uso e API em `docs/importacao.md`.
+
+Implementado nesta etapa (commit local na branch `appmod/java-upgrade-20260903013431`, sem push nem deploy):
+- Pacote `importacao`: `ExtratoParser` (OFX SGML/XML de conta e cartão; CSV com `,`/`;`/tab, preâmbulo, colunas Data/Descrição/Valor ou Débito+Crédito, Identificador; valores e datas em formatos brasileiros; UTF-8 ou Windows-1252), `ImportacaoService` e `ImportacaoController` (`POST /api/importacoes/extrato`, multipart, `confirmar=false` pré-visualiza sem gravar).
+- Deduplicação por `id_externo` `arq:<sha256>` (FITID/identificador do banco ou conteúdo + ordem de ocorrência, escopo pela conta). Reimportar não duplica; compras idênticas no mesmo dia são mantidas.
+- Status por lançamento: NOVO, JA_IMPORTADO, POSSIVEL_DUPLICADO (mesma data/valor/tipo de outra origem; fora por padrão) e PAGAMENTO_FATURA (fora por padrão para não contar o gasto duas vezes).
+- Categorização: histórico do usuário (mesma descrição) > `GeminiService.categorizarHeuristica` > `GeminiService.categorizarLote` (uma chamada para o que sobrar como "Outros", só com `GEMINI_API_KEY`). A chave do Gemini passou da URL para o cabeçalho `x-goog-api-key`.
+- Limites: 2 MB (`spring.servlet.multipart`), 5.000 lançamentos, 300 itens na resposta. Erros de arquivo retornam 422 `{"erro"}`; tamanho, 413.
+- PWA: botão "Importar extrato" em Movimentações e atalho no diálogo Open Finance; diálogo com pré-visualização, avisos e confirmação. Campo do formulário chama-se `contaImportacao` para não colidir com `[name=conta]` do lançamento. Service worker `v5`.
+
+Verificado:
+- 60 testes de backend aprovados (inclui `ExtratoParserTest` 10 e `ImportacaoIntegrationTest` 7).
+- 9 testes E2E aprovados, incluindo importação com pré-visualização, confirmação, reimportação sem duplicar e arquivo inválido. Captura em 375px sem overflow horizontal.
+- `node --check`, `npm run check` e `git diff --check` sem erros.
+- Não testado com arquivos reais de bancos; layouts não reconhecidos exibem erro e exigem ajuste no parser com exemplo anonimizado.
+
 ## Entrega Arquitetura de Banco de Dados — 30/10/2026
 
 Objetivo: revisar a arquitetura de banco e corrigir integridade, deduplicação e gestão de esquema.
 
-Implementado nesta etapa (não commitado; no working tree da branch `appmod/java-upgrade-20260903013431`):
+Implementado nesta etapa (commit local `6f307e0` na branch `appmod/java-upgrade-20260903013431`, sem push nem deploy):
 - Flyway (`flyway-core` + `flyway-database-postgresql`) com migrações em `backend/src/main/resources/db/migration/`:
   - `V1__esquema_inicial.sql`: baseline igual ao esquema que o Hibernate gerava.
   - `V2__indices.sql`: índices em `movimentacao.data`, `conta_conectada.item_id` e `investimento.item_id`.

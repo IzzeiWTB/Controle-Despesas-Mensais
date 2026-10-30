@@ -52,7 +52,7 @@ async function request(path, options = {}) {
     try {
       response = await fetch(`${apiUrl}${path}`, {
         ...options, cache: 'no-store', redirect: 'error', signal: controller.signal,
-        headers: { 'X-API-Key': apiKey, ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
+        headers: { 'X-API-Key': apiKey, ...(typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}) }
       });
     } catch {
       throw new Error(controller.signal.aborted ? 'O servidor demorou para responder. Aguarde e tente novamente.' : 'Sem conexão com o servidor. Verifique sua internet e o endereço da API.');
@@ -61,6 +61,10 @@ async function request(path, options = {}) {
       if (response.status === 401) {
         endSession();
         throw new Error('Chave inválida ou expirada. Entre novamente.');
+      }
+      if (response.status === 413 || response.status === 422) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.erro || 'Arquivo não reconhecido. Use um extrato OFX ou CSV exportado pelo banco.');
       }
       if (response.status === 400) throw new Error('Revise os campos: descrição, data, categoria e valor com até duas casas decimais.');
       if (response.status === 404) throw new Error('Registro ou endereço não encontrado. Atualize a lista.');
@@ -634,6 +638,105 @@ $('#sync-of-btn').onclick = async () => {
     btn.disabled = false;
   }
 };
+const IMPORT_STATUS = {
+  NOVO: ['Novo', 'of-tag'],
+  JA_IMPORTADO: ['Já importado', 'of-tag muted-tag'],
+  POSSIVEL_DUPLICADO: ['Possível duplicado', 'of-tag warn'],
+  PAGAMENTO_FATURA: ['Pagamento de fatura', 'of-tag muted-tag']
+};
+let importPreview = null;
+function resetImport() {
+  importPreview = null;
+  $('#import-preview').innerHTML = '';
+  for (const id of ['#import-preview', '#import-dups-row', '#import-card-row', '#import-confirm']) $(id).classList.add('hidden');
+  $('#import-dups').checked = false;
+  $('#import-card-payments').checked = false;
+}
+function openImport() {
+  $('#import-form').reset();
+  resetImport();
+  $('#import-error').textContent = '';
+  $('#import-dialog').showModal();
+}
+function importableCount(res) {
+  return res.novos + ($('#import-dups').checked ? res.possiveisDuplicados : 0) + ($('#import-card-payments').checked ? res.pagamentosFatura : 0);
+}
+function updateImportConfirm() {
+  if (!importPreview) return;
+  const count = importableCount(importPreview);
+  $('#import-confirm').textContent = count ? `Importar ${count} lançamento(s)` : 'Nada novo para importar';
+  $('#import-confirm').disabled = !count;
+}
+function renderImportPreview(res) {
+  const parts = [`${res.novos} novo(s)`];
+  if (res.jaImportados) parts.push(`${res.jaImportados} já importado(s)`);
+  if (res.possiveisDuplicados) parts.push(`${res.possiveisDuplicados} possível(is) duplicado(s) de lançamentos já cadastrados`);
+  if (res.pagamentosFatura) parts.push(`${res.pagamentosFatura} pagamento(s) de fatura, fora por padrão para não contar o gasto duas vezes`);
+  const summary = `<p class="import-summary"><strong>${clean(res.formato)} · ${res.cartao ? 'fatura de cartão' : 'extrato de conta'}</strong> · ${clean(res.conta)}<br>${res.total} lançamento(s): ${parts.join(', ')}.${res.itensOmitidos ? ` Mostrando os ${res.itens.length} mais recentes.` : ''}</p>`;
+  const items = res.itens.map(x => {
+    const [label, tagClass] = IMPORT_STATUS[x.status] || [x.status, 'of-tag'];
+    return `<div class="import-item"><span>${clean(x.descricao)}</span><strong class="${x.tipo === 'ENTRADA' ? 'income-text' : ''}">${privacyMode ? money(0) : `${x.tipo === 'ENTRADA' ? '+' : '−'} ${money(x.valor)}`}</strong><small>${new Date(`${x.data}T12:00:00`).toLocaleDateString('pt-BR')} · ${clean(x.categoria)}</small><span class="${tagClass}">${label}</span></div>`;
+  }).join('');
+  $('#import-preview').innerHTML = summary + items;
+  $('#import-preview').classList.remove('hidden');
+  $('#import-dups-row').classList.toggle('hidden', !res.possiveisDuplicados);
+  $('#import-card-row').classList.toggle('hidden', !res.pagamentosFatura);
+  $('#import-confirm').classList.remove('hidden');
+  updateImportConfirm();
+}
+async function runImport(confirm) {
+  const form = $('#import-form'), body = new FormData();
+  body.append('arquivo', form.elements.arquivo.files[0]);
+  body.append('conta', form.elements.contaImportacao.value.trim());
+  body.append('cartao', String(form.elements.cartao.checked));
+  body.append('confirmar', String(confirm));
+  body.append('incluirPossiveisDuplicados', String($('#import-dups').checked));
+  body.append('incluirPagamentosFatura', String($('#import-card-payments').checked));
+  saving = true;
+  const controls = [...form.elements];
+  controls.forEach(control => control.disabled = true);
+  $('#import-error').textContent = confirm ? 'Importando…' : 'Lendo o arquivo…';
+  try {
+    const res = await request('/importacoes/extrato', { method: 'POST', body });
+    if (!confirm) {
+      importPreview = res;
+      renderImportPreview(res);
+      $('#import-error').textContent = '';
+      return;
+    }
+    $('#import-dialog').close();
+    if (res.importados && res.dataMaisRecente) $('#period').value = res.dataMaisRecente.slice(0, 7);
+    try {
+      await load();
+      status(res.importados ? `${res.importados} lançamento(s) importado(s) para ${res.conta}. Mostrando ${monthName($('#period').value)}.` : 'Nenhum lançamento novo para importar.');
+    } catch {
+      status('Lançamentos importados, mas a lista não pôde ser atualizada. Use Atualizar.', true);
+    }
+  } catch (error) {
+    $('#import-error').textContent = error.message;
+  } finally {
+    saving = false;
+    controls.forEach(control => control.disabled = false);
+    updateImportConfirm();
+  }
+}
+$('#import-btn').onclick = openImport;
+$('#of-import-btn').onclick = () => { if (saving) return; $('#of-dialog').close(); openImport(); };
+$('#close-import').onclick = () => { if (!saving) $('#import-dialog').close(); };
+$('#import-dialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+$('#import-form').onchange = event => {
+  if (['import-dups', 'import-card-payments'].includes(event.target.id)) updateImportConfirm();
+  else resetImport();
+};
+$('#import-form').onsubmit = event => {
+  event.preventDefault();
+  if (saving) return;
+  const file = event.currentTarget.elements.arquivo.files[0];
+  if (!file) { $('#import-error').textContent = 'Escolha o arquivo exportado pelo banco.'; return; }
+  if (file.size > 2 * 1024 * 1024) { $('#import-error').textContent = 'Arquivo maior que 2 MB. Exporte um período menor.'; return; }
+  runImport(false);
+};
+$('#import-confirm').onclick = () => { if (!saving && importPreview) runImport(true); };
 window.clarezaBack = () => {
   if (saving || exporting) return true;
   const dialog = document.querySelector('dialog[open]');

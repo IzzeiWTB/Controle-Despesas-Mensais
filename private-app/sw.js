@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clareza-privado-v4';
+const CACHE_NAME = 'clareza-privado-v5';
 const FILES = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', event => event.waitUntil(

@@ -209,3 +209,44 @@ test('ai categorization, insights and open finance synchronization', async ({ pa
   await expect(page.locator('#insight-title')).not.toHaveText('Seu resumo está pronto.');
   await expect(page.locator('#ai-suggestions')).toBeVisible();
 });
+
+test('bank statement import previews, imports and does not duplicate', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const csv = 'date,title,amount\n2025-03-03,Uber Trip,23.40\n2025-03-05,Padaria Central,18.00\n2025-03-10,Pagamento recebido,-500.00\n';
+  const file = { name: 'fatura-2025-03.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) };
+  await login(page);
+
+  await page.locator('#import-btn').click();
+  await expect(page.locator('#import-dialog')).toBeVisible();
+  await page.locator('#import-form [name=arquivo]').setInputFiles(file);
+  await page.locator('#import-form [name=contaImportacao]').fill('Cartão teste');
+  await page.locator('#import-form [type=submit]').click();
+  await expect(page.locator('#import-preview')).toContainText('fatura de cartão');
+  await expect(page.locator('#import-preview')).toContainText('2 novo(s)');
+  await expect(page.locator('#import-preview .import-item')).toHaveCount(3);
+  await expect(page.locator('#import-preview')).toContainText('Transporte');
+  await expect(page.locator('#import-card-row')).toBeVisible();
+  await expect(page.locator('#import-confirm')).toHaveText('Importar 2 lançamento(s)');
+  await page.locator('#import-confirm').click();
+
+  await expect(page.locator('#import-dialog')).toBeHidden();
+  await expect(page.locator('#dashboard-status')).toContainText('2 lançamento(s) importado(s)');
+  await expect(page.locator('#period')).toHaveValue('2025-03');
+  await expect(page.locator('.transaction')).toHaveCount(2);
+  await expect(page.locator('#list')).toContainText('Cartão teste');
+  await expect(page.locator('#expenses')).toContainText('41,40');
+
+  await page.locator('#import-btn').click();
+  await page.locator('#import-form [name=arquivo]').setInputFiles(file);
+  await page.locator('#import-form [name=contaImportacao]').fill('Cartão teste');
+  await page.locator('#import-form [type=submit]').click();
+  await expect(page.locator('#import-preview')).toContainText('2 já importado(s)');
+  await expect(page.locator('#import-confirm')).toBeDisabled();
+  await page.locator('#import-form [name=arquivo]').setInputFiles({ name: 'x.csv', mimeType: 'text/csv', buffer: Buffer.from('nome,idade\nAna,30\n') });
+  await page.locator('#import-form [type=submit]').click();
+  await expect(page.locator('#import-error')).toContainText('CSV não reconhecido');
+  await page.locator('#close-import').click();
+  await expect(page.locator('.transaction')).toHaveCount(2);
+  expect(errors).toEqual([]);
+});

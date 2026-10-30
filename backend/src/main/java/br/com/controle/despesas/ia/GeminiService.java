@@ -80,11 +80,11 @@ public class GeminiService {
                 )
         );
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent?key=" + geminiApiKey;
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+                .uri(URI.create(endpoint()))
                 .timeout(Duration.ofSeconds(8))
                 .header("Content-Type", "application/json")
+                .header("x-goog-api-key", geminiApiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
                 .build();
 
@@ -102,6 +102,51 @@ public class GeminiService {
             }
         }
         return null;
+    }
+
+    /**
+     * Categoriza varias descricoes em uma unica chamada ao Gemini (importacao de extratos).
+     * Retorna apenas as descricoes classificadas em categoria valida; vazio sem chave ou em falha.
+     */
+    public Map<String, String> categorizarLote(List<String> descricoes) {
+        if (!isConfigurado() || descricoes == null || descricoes.isEmpty()) return Map.of();
+        List<String> lote = descricoes.stream().distinct().limit(80).toList();
+        try {
+            String prompt = "Você é o categorizador financeiro do app Clareza. Para cada descrição de transação bancária/fatura "
+                    + "da lista JSON abaixo, escolha EXCLUSIVAMENTE uma destas categorias: "
+                    + String.join(", ", CATEGORIAS_VALIDAS) + ".\n"
+                    + "Responda APENAS com um objeto JSON cujas chaves são as descrições exatamente como recebidas e os valores são as categorias.\n"
+                    + json.writeValueAsString(lote);
+            Map<String, Object> payload = Map.of(
+                    "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
+                    "generationConfig", Map.of("temperature", 0.1, "responseMimeType", "application/json")
+            );
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint()))
+                    .timeout(Duration.ofSeconds(20))
+                    .header("Content-Type", "application/json")
+                    .header("x-goog-api-key", geminiApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) return Map.of();
+            String text = json.readTree(response.body()).path("candidates").path(0).path("content").path("parts").path(0).path("text").asText();
+            if (text == null || text.isBlank()) return Map.of();
+            JsonNode parsed = json.readTree(text);
+            Map<String, String> resultado = new HashMap<>();
+            for (String d : lote) {
+                String cat = parsed.path(d).asText("");
+                if (CATEGORIAS_VALIDAS.contains(cat)) resultado.put(d, cat);
+            }
+            return resultado;
+        } catch (Exception e) {
+            log.warn("Falha ao categorizar lote com Gemini, usando heuristica local: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private String endpoint() {
+        return "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent";
     }
 
     public Map<String, Object> gerarInsight(List<Movimentacao> movimentacoes,
@@ -163,11 +208,11 @@ public class GeminiService {
                 "generationConfig", Map.of("temperature", 0.3, "responseMimeType", "application/json")
         );
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent?key=" + geminiApiKey;
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+                .uri(URI.create(endpoint()))
                 .timeout(Duration.ofSeconds(12))
                 .header("Content-Type", "application/json")
+                .header("x-goog-api-key", geminiApiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
                 .build();
 

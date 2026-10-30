@@ -13,4 +13,5 @@ public interface MovimentacaoRepository extends JpaRepository<Movimentacao, UUID
     boolean existsByRecorrenciaOrigemId(UUID recorrenciaOrigemId);
 
     List<Movimentacao> findByIdExternoStartingWith(String prefixo);
+    List<Movimentacao> findByIdExternoIn(java.util.Collection<String> idsExternos);
 }
