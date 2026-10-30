@@ -28,7 +28,9 @@ Verificado:
 - 60 testes de backend aprovados (inclui `ExtratoParserTest` 10 e `ImportacaoIntegrationTest` 7).
 - 9 testes E2E aprovados, incluindo importação com pré-visualização, confirmação, reimportação sem duplicar e arquivo inválido. Captura em 375px sem overflow horizontal.
 - `node --check`, `npm run check` e `git diff --check` sem erros.
+- `npm --prefix mobile run apk` (assembleDebug, testes unitários e lint) aprovado; APK `mobile/artifacts/Clareza-1.0-debug.apk` SHA-256 `B3E38F4157EFA68C6912C6D5C6A662C01CE6B4F3793FFE10BC4CC9C91A8752DD`. Seleção de arquivo no APK não foi testada em emulador nem telefone.
 - Não testado com arquivos reais de bancos; layouts não reconhecidos exibem erro e exigem ajuste no parser com exemplo anonimizado.
+- Pendente para uso real: push para `main` (deploy no Render aplica Flyway V2–V4 no Neon; fazer backup antes) e instalar o novo APK.
 
 ## Entrega Arquitetura de Banco de Dados — 30/10/2026
 
