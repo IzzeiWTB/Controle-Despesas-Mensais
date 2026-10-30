@@ -26,7 +26,9 @@ Implementado (commit local, sem push nem deploy):
 
 Verificado: 67 testes de backend (PluggySincronizacaoTest 19, com stub da Pluggy incluindo paginação, cartão, fatura, item e erros) e 9 E2E aprovados; diálogo em 375 px sem overflow. **Não verificado com a API real da Pluggy/Meu Pluggy.**
 
-Pendente do titular: criar `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET` no Render (nunca na conversa), backup do Neon, push/deploy (Flyway V2–V5), copiar os Item IDs do painel e vincular no app; conferir na primeira sincronização sinais do cartão, fatura, datas e eventual duplicidade de lançamentos pendentes.
+Publicado em 30/10/2026: `734d30c` na main (inclui `6f307e0`, `fa53902`, `0335123`), por decisão do titular **sem backup prévio do Neon** (migrações apenas aditivas). Render serviu a versão nova em ~150 s: `/app.js` idêntico à fonte, `sw.js` em `v5`, `/` 200, API sem chave 401 com `no-store` e CORS. O app só sobe após Flyway + `validate`, então V2–V5 foram aplicadas no Neon. O titular informou que `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET` estão no Render e conectou 3 itens MeuPluggy no painel (Demo) com dados reais (ex.: Santander e cartão final 4177).
+
+Pendente do titular: vincular os 3 Item IDs no app (informando o nome do banco) e conferir na primeira sincronização sinais do cartão, fatura, datas e eventual duplicidade de lançamentos pendentes. Instalar o APK novo no telefone.
 
 ## Entrega Importação de Extratos e Faturas (OFX/CSV) — 30/10/2026
 
