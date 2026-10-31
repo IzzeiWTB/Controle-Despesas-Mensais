@@ -12,6 +12,23 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Entrega Visão geral: saldo total, previstos e projeção — 31/10/2026
+
+Pedido do titular: saldo atual total, gastos previstos "e coisas desse tipo".
+
+Implementado:
+- `GET /api/resumo?periodo=AAAA-MM` (`resumo/ResumoService`, `ResumoController`; período padrão = mês atual pelo `Clock`; inválido → 400).
+- `patrimonio`: saldo das contas conectadas (não cartão), faturas abertas (`faturaAtual` positiva), limite livre dos cartões, investimentos e patrimônio líquido (contas + investimentos − faturas), com a data da última atualização. É uma foto atual, independente do período.
+- `previstos` (só mês atual ou futuro), sem repetir o que já foi lançado no período (comparação por tipo + descrição sem números, acentos e pontuação):
+  - RECORRENTE: lançamento marcado como recorrente no mês anterior e ainda não trazido;
+  - PARCELA: descrição com "N/M" no mês anterior e N < M (próxima parcela, mesmo valor). Datas no formato dd/mm dentro da descrição podem ser confundidas com parcela;
+  - DETECTADO: mesma descrição em pelo menos 2 dos 3 meses anteriores, no máximo 2 vezes por mês, maior valor ≤ 1,5 × o menor, e presente em um dos dois últimos meses.
+- `saldoPrevistoFimMes` (só mês atual com contas): saldo em contas + entradas previstas − gastos previstos − faturas abertas. Assume que as faturas atuais serão pagas no mês.
+- `ritmo` (mês atual, a partir do dia 5): despesas até hoje, média diária e projeção linear do mês.
+- PWA: seção "Visão geral · Seu dinheiro hoje" entre os totais do mês e o "Clareza em Foco", com quatro indicadores, saldo previsto, ritmo e lista "Previstos para <mês>" (classe `forecast-item`, não `transaction`, para não confundir a lista de movimentações). Oculta sem contas, previstos ou ritmo. Respeita "Ocultar valores". Service worker `v7`.
+
+Verificado: `ResumoTest` (5) com relógio fixo em 20/10/2026 cobre patrimônio, os três tipos de previsto, exclusões (frequente demais, valor instável, última parcela, já lançado), projeção, ritmo, mês passado e período inválido. 77 testes de backend e 9 E2E aprovados (painel visível após o Sandbox, privacidade e 375 px sem overflow). Não verificado com os dados reais do titular.
+
 ## Correção HTTP 410 nas transações Pluggy — 30/10/2026
 
 Primeiro uso real: os itens Nubank e Itaú falharam com "A Pluggy respondeu HTTP 410 em /transactions". Causa: o `GET /transactions` paginado (`page`/`pageSize`/`from`) foi descontinuado e responde 410 `ENDPOINT_DEPRECATED` para chaves novas, antes da data anunciada (31/12/2026). Corrigido: `PluggyService.consultarTransacoes` usa `GET /v2/transactions?accountId=&dateFrom=yyyy-mm-dd` e segue o cursor opaco `next` (query string pronta; `null` na última página; até 40 páginas). Erros da Pluggy passam a incluir `code`/`message` do corpo (ex.: "HTTP 410 em /transactions (ENDPOINT_DEPRECATED)"). `/investments` continua paginado por `page`. Stub de teste responde 410 na rota v1. 68 testes de backend aprovados. Ainda não confirmado com a API real.

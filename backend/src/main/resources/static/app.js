@@ -16,7 +16,7 @@ const DEFAULT_API = configured ? new URL(configured, location.href).href : 'http
 let apiUrl = readStorage(sessionStorage, 'clareza-api-url', DEFAULT_API);
 let apiKey = readStorage(sessionStorage, 'clareza-api-key');
 let privacyMode = readStorage(localStorage, 'clareza-privacy-mode') === 'true';
-let movements = [], budgets = {}, goals = [], ofAccounts = [], ofInvestments = [], ofItems = [], editingId = null, editingGoalId = null, deferredInstallPrompt;
+let movements = [], budgets = {}, goals = [], ofAccounts = [], ofInvestments = [], ofItems = [], summary = null, editingId = null, editingGoalId = null, deferredInstallPrompt;
 let loadedPeriod = null, loadVersion = 0, saving = false, exporting = false;
 const money = value => privacyMode ? '••••••' : formatter.format(value || 0);
 const cents = value => Math.round(Number(value) * 100);
@@ -120,6 +120,8 @@ async function load() {
       const linked = await request('/open-finance/itens');
       ofItems = Array.isArray(linked) ? linked : [];
     } catch { ofAccounts = []; ofInvestments = []; ofItems = []; }
+    try { summary = await request(`/resumo?periodo=${period}`); } catch { summary = null; }
+    if (version !== loadVersion) return false;
     loadedPeriod = period;
     render();
     status(`${items.length} lançamento(s) em ${monthName(period)}. Dados atualizados.`);
@@ -149,6 +151,7 @@ function render() {
   renderGoals();
   renderOpenFinance();
   renderAccounts();
+  renderOverview();
 }
 function renderList() {
   if (!loadedPeriod) { $('#list').innerHTML = '<p class="empty">Os dados deste mês ainda não foram carregados.</p>'; return; }
@@ -284,6 +287,47 @@ function renderOpenFinance() {
     </div>` + itemsHtml;
   }
 }
+const FORECAST_ORIGINS = { RECORRENTE: 'Recorrente', PARCELA: 'Parcela', DETECTADO: 'Todo mês' };
+/** Visão geral: saldo real das contas conectadas, faturas, investimentos, previstos e projeção do mês. */
+function renderOverview() {
+  const ready = loadedPeriod === $('#period').value && summary?.periodo === loadedPeriod;
+  const wealth = summary?.patrimonio;
+  const previstos = ready && Array.isArray(summary.previstos) ? summary.previstos : [];
+  const visible = ready && (wealth?.temContas || Number(wealth?.investimentos) > 0 || previstos.length || summary.ritmo);
+  $('#overview').classList.toggle('hidden', !visible);
+  if (!visible) return;
+  $('#ov-saldo').textContent = money(wealth.saldoContas);
+  $('#ov-saldo').classList.toggle('danger', !privacyMode && wealth.saldoContas < 0);
+  $('#ov-contas').textContent = wealth.quantidadeContas ? `${wealth.quantidadeContas} conta(s) conectada(s)` : 'Nenhuma conta conectada';
+  $('#ov-faturas').textContent = money(wealth.faturasAbertas);
+  $('#ov-limite').textContent = wealth.quantidadeCartoes ? `Limite livre: ${money(wealth.limiteDisponivel)}` : 'Nenhum cartão conectado';
+  $('#ov-invest').textContent = money(wealth.investimentos);
+  $('#ov-liquido').textContent = money(wealth.patrimonioLiquido);
+  $('#ov-liquido').classList.toggle('danger', !privacyMode && wealth.patrimonioLiquido < 0);
+  $('#ov-updated').textContent = wealth.atualizadoEm ? `Bancos atualizados em ${new Date(wealth.atualizadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : '';
+
+  const month = monthName(summary.periodo).split(' de ')[0];
+  const parts = [];
+  if (summary.saldoPrevistoFimMes != null) {
+    const projected = Number(summary.saldoPrevistoFimMes);
+    parts.push(`<div class="forecast-total"><div><span>Saldo previsto no fim de ${clean(month)}</span><small>Saldo em contas + entradas previstas − gastos previstos − faturas abertas</small></div><strong class="${!privacyMode && projected < 0 ? 'negative' : ''}">${money(projected)}</strong></div>`);
+  }
+  if (summary.ritmo) {
+    const pace = summary.ritmo;
+    parts.push(`<p class="forecast-pace">${privacyMode ? 'Valores ocultos.' : `Até hoje você gastou ${money(pace.despesasAteHoje)} em ${clean(month)} (média de ${money(pace.mediaDiaria)} por dia). Nesse ritmo, as despesas do mês chegam a cerca de <strong>${money(pace.projecaoDespesasMes)}</strong>.`}</p>`);
+  }
+  if (previstos.length) {
+    const rows = previstos.map(item => `<article class="forecast-item">
+      <span class="category-icon" aria-hidden="true">${ICONS[item.categoria] || '·'}</span>
+      <div class="transaction-copy"><strong>${clean(item.descricao)}</strong><small>${new Date(`${item.dataPrevista}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} · ${FORECAST_ORIGINS[item.origem] || 'Previsto'}${item.conta ? ` · ${clean(item.conta)}` : ''}</small></div>
+      <strong class="amount ${item.tipo === 'ENTRADA' ? 'income-text' : ''}">${privacyMode ? money(0) : `${item.tipo === 'ENTRADA' ? '+' : '−'} ${money(item.valor)}`}</strong></article>`).join('');
+    const incoming = Number(summary.totalPrevistoEntradas) > 0 ? ` · Entradas: ${money(summary.totalPrevistoEntradas)}` : '';
+    parts.push(`<div class="forecast-head"><h3>Previstos para ${clean(month)}</h3><span class="muted">Gastos: ${money(summary.totalPrevistoSaidas)}${incoming}</span></div><div class="forecast-list">${rows}</div><p class="forecast-pace">Recorrentes marcados, próximas parcelas e contas que se repetem todo mês e ainda não apareceram neste mês.</p>`);
+  } else if (summary.mesAtual) {
+    parts.push('<p class="forecast-pace">Nenhum gasto previsto pendente: as contas que se repetem já apareceram neste mês.</p>');
+  }
+  $('#ov-forecast').innerHTML = parts.join('');
+}
 function openMovement(item) {
   editingId = item?.id || null;
   const form = $('#movement-form');
@@ -307,6 +351,7 @@ function endSession() {
   goals = [];
   ofAccounts = [];
   ofInvestments = [];
+  summary = null;
   ofItems = [];
   loadedPeriod = null;
   $('#api-key').value = '';

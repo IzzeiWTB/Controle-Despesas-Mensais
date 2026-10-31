@@ -211,6 +211,15 @@ test('ai categorization, insights and open finance synchronization', async ({ pa
   await expect(page.locator('#of-accounts-list')).toContainText('Fatura atual:');
   await expect(page.locator('#of-investments-list')).toContainText('Total em Investimentos');
   await expect(page.locator('#of-investments-list')).toContainText('Tesouro Selic 2029');
+  await expect(page.locator('#overview')).toBeVisible();
+  await expect(page.locator('#ov-saldo')).toHaveText(/4\.730,80/);
+  await expect(page.locator('#ov-faturas')).toHaveText(/1\.820,45/);
+  await page.locator('#privacy').click();
+  await expect(page.locator('#ov-liquido')).toHaveText('••••••');
+  await page.locator('#privacy').click();
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.setViewportSize({ width: 1280, height: 800 });
 
   // 3. AI Insights
   await page.locator('#ai-insight-btn').click();
