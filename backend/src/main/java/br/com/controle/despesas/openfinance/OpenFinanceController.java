@@ -79,6 +79,12 @@ public class OpenFinanceController {
         return investimentoRepository.findAllByOrderByInstituicaoAscNomeAsc();
     }
 
+    /** Dados de teste (simulação/Sandbox): confirmar=false só lista; confirmar=true remove. */
+    @PostMapping("/limpar-dados-teste")
+    public Map<String, Object> limparDadosDeTeste(@RequestParam(defaultValue = "false") boolean confirmar) {
+        return pluggyService.limparDadosDeTeste(confirmar);
+    }
+
     @DeleteMapping("/itens/{itemId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removerItem(@PathVariable String itemId) {

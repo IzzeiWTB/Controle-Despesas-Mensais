@@ -24,6 +24,10 @@ A Pluggy só libera bancos reais em produção com contrato comercial. Para uso 
 - **Autorização**: vale 1 ano. Quando expirar, a sincronização mostra o erro no item; refaça o passo 2 e vincule o novo Item ID (ele pode mudar). Lançamentos antigos são preservados.
 - **Categorias**: histórico, regras e Gemini em lote (só com `GEMINI_API_KEY`).
 
+## Dados de teste antigos
+
+Contas como "Conta Corrente Nubank", "Cartão de Crédito Ultravioleta" e "Itaú Uniclass" e lançamentos como "iFood Restaurante delivery" e "Netflix Assinatura Mensal" vêm do antigo modo Sandbox. Para removê-los: *Open Finance → Outras formas de conectar → Remover dados de teste (Sandbox)*. O app mostra o que será removido antes de apagar; bancos vinculados e lançamentos reais ficam.
+
 ## A verificar no primeiro uso real
 
 Os testes usam um servidor simulado da Pluggy. Na primeira sincronização real, confira: compras do cartão como despesa, fatura atual e limite dos cartões, saldos, datas e se lançamentos pendentes geram duplicidade quando são confirmados.

@@ -217,6 +217,21 @@ test('ai categorization, insights and open finance synchronization', async ({ pa
   await expect(page.locator('#dashboard-status')).toContainText('gerada com');
   await expect(page.locator('#insight-title')).not.toHaveText('Seu resumo está pronto.');
   await expect(page.locator('#ai-suggestions')).toBeVisible();
+
+  // 4. Remove sandbox test data after confirming the preview
+  await page.locator('#open-finance-btn').click();
+  await expect(page.locator('#of-dialog')).toBeVisible();
+  await page.locator('.of-more').evaluate(details => { details.open = true; });
+  let preview = '';
+  page.once('dialog', dialog => { preview = dialog.message(); dialog.accept(); });
+  await page.locator('#clean-test-btn').click();
+  await expect(page.locator('#of-info')).toContainText('Removidos: 3 conta(s), 3 investimento(s)');
+  expect(preview).toContain('Conta Corrente Nubank');
+  await expect(page.locator('#of-accounts-list')).not.toContainText('Ultravioleta');
+  await expect(page.locator('#of-investments-list')).not.toContainText('Tesouro Selic 2029');
+  await expect(page.locator('#list')).not.toContainText('Netflix Assinatura Mensal');
+  await page.locator('#clean-test-btn').click();
+  await expect(page.locator('#of-info')).toHaveText('Nenhum dado de teste encontrado.');
 });
 
 test('bank statement import previews, imports and does not duplicate', async ({ page }) => {

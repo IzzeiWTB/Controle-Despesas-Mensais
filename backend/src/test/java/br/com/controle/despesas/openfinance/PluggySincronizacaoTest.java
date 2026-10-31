@@ -427,6 +427,42 @@ class PluggySincronizacaoTest {
         assertEquals("SAIDA", porDescricao("Mercado  Bom").getTipo());
     }
 
+    @Test void limpaDadosDeTesteSemTocarNosBancosVinculadosNemEmLancamentosReais() throws Exception {
+        service.vincularItem("item-real", "Nubank");               // banco real: 2 contas, 1 investimento, 2 lancamentos
+        sincronizar("mock-sandbox-item");                           // simulacao: 3 contas, 3 investimentos, 5 lancamentos
+        legado("iFood Restaurante delivery", "74.90", "Nubank");     // antigo modo simulado, sem id
+        legado("Compra teste", "10.00", "Banco Conectado");          // antiga sincronizacao com o banco de teste
+        legado("iFood Restaurante delivery", "52.00", "Nubank");     // lancamento real parecido: fica
+        ContaConectada orfa = new ContaConectada();                  // conta de item nao vinculado (Pluggy Connect de teste)
+        orfa.setItemId("item-antigo-teste"); orfa.setInstituicao("Pluggy Bank"); orfa.setNome("Conta"); orfa.setTipo("CORRENTE");
+        contas.save(orfa);
+
+        mvc.perform(post("/api/open-finance/limpar-dados-teste").header("X-API-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.removido").value(false))
+                .andExpect(jsonPath("$.contas").value(4))
+                .andExpect(jsonPath("$.investimentos").value(3))
+                .andExpect(jsonPath("$.lancamentos").value(7));
+        assertEquals(6, contas.count());
+
+        mvc.perform(post("/api/open-finance/limpar-dados-teste").param("confirmar", "true").header("X-API-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.removido").value(true));
+        assertEquals(2, contas.count());
+        assertTrue(contas.findAll().stream().allMatch(c -> "item-real".equals(c.getItemId())));
+        assertEquals(1, investimentos.count());
+        assertEquals(3, movimentacoes.count());
+        assertTrue(movimentacoes.existsByIdExterno("pluggy:t1"));
+        assertEquals(new java.math.BigDecimal("52.00"), porDescricao("iFood Restaurante delivery").getValor());
+    }
+
+    private void legado(String descricao, String valor, String conta) {
+        Movimentacao m = new Movimentacao();
+        m.setDescricao(descricao); m.setValor(new java.math.BigDecimal(valor)); m.setData(java.time.LocalDate.of(2026, 10, 1));
+        m.setCategoria("Outros"); m.setTipo("SAIDA"); m.setConta(conta);
+        movimentacoes.save(m);
+    }
+
     @Test void erroDaPluggyIncluiCodigoDoCorpo() throws Exception {
         statusContas = 410;
         RESPOSTAS.put("accounts", "{\"code\":\"ENDPOINT_DEPRECATED\",\"message\":\"Gone\"}");

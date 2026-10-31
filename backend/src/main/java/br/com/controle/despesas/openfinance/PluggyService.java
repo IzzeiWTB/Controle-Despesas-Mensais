@@ -790,4 +790,59 @@ public class PluggyService {
             itemRepository.findById(itemId).ifPresent(itemRepository::delete);
         });
     }
+
+    /** Lancamentos que o antigo modo simulado gravava sem id externo (descricao, valor, conta). */
+    private static final List<TransacaoPluggy> LANCAMENTOS_SIMULADOS_LEGADOS = List.of(
+            new TransacaoPluggy(null, "iFood Restaurante delivery", new BigDecimal("74.90"), "SAIDA", null, "Nubank"),
+            new TransacaoPluggy(null, "Uber *Trip Central", new BigDecimal("28.50"), "SAIDA", null, "Nubank"),
+            new TransacaoPluggy(null, "Posto Ipiranga Combustivel", new BigDecimal("180.00"), "SAIDA", null, "Itaú"),
+            new TransacaoPluggy(null, "Drogaria Raia Medicamentos", new BigDecimal("65.20"), "SAIDA", null, "Nubank"),
+            new TransacaoPluggy(null, "Netflix Assinatura Mensal", new BigDecimal("55.90"), "SAIDA", null, "Nubank"));
+
+    /** Rotulo de conta que a antiga sincronizacao (so alcancava o banco de teste da Pluggy) gravava. */
+    private static final String CONTA_LEGADA_TESTE = "Banco Conectado";
+
+    /**
+     * Remove dados de teste: contas e investimentos que nao pertencem a nenhum banco vinculado (simulacao/Sandbox
+     * e o antigo Pluggy Connect de teste) e lancamentos ficticios (ids "sandbox:", os cinco do antigo modo simulado
+     * gravados sem id e os da conta "Banco Conectado"). Sem confirmar, apenas lista o que seria removido.
+     */
+    public Map<String, Object> limparDadosDeTeste(boolean confirmar) {
+        Set<String> vinculados = new HashSet<>();
+        itemRepository.findAll().forEach(i -> vinculados.add(i.getItemId()));
+        java.util.function.Predicate<String> deTeste = itemId -> itemId == null || ehItemSimulado(itemId) || !vinculados.contains(itemId);
+
+        List<ContaConectada> contasTeste = contaRepository.findAll().stream().filter(c -> deTeste.test(c.getItemId())).toList();
+        List<Investimento> investimentosTeste = investimentoRepository.findAll().stream().filter(i -> deTeste.test(i.getItemId())).toList();
+
+        Map<java.util.UUID, Movimentacao> lancamentos = new LinkedHashMap<>();
+        movimentacaoRepository.findByIdExternoStartingWith("sandbox:").forEach(m -> lancamentos.put(m.getId(), m));
+        movimentacaoRepository.findByIdExternoIsNullAndDescricaoIn(
+                        LANCAMENTOS_SIMULADOS_LEGADOS.stream().map(TransacaoPluggy::descricao).toList()).stream()
+                .filter(m -> LANCAMENTOS_SIMULADOS_LEGADOS.stream().anyMatch(s -> s.descricao().equals(m.getDescricao())
+                        && s.valor().compareTo(m.getValor()) == 0 && s.tipo().equals(m.getTipo()) && s.conta().equals(m.getConta())))
+                .forEach(m -> lancamentos.put(m.getId(), m));
+        movimentacaoRepository.findByIdExternoIsNullAndConta(CONTA_LEGADA_TESTE).forEach(m -> lancamentos.put(m.getId(), m));
+
+        if (confirmar) {
+            transacao.executeWithoutResult(status -> {
+                contaRepository.deleteAll(contasTeste);
+                investimentoRepository.deleteAll(investimentosTeste);
+                movimentacaoRepository.deleteAll(lancamentos.values());
+            });
+        }
+        List<Map<String, Object>> amostra = lancamentos.values().stream()
+                .sorted(Comparator.comparing(Movimentacao::getData).reversed())
+                .limit(30)
+                .map(m -> Map.<String, Object>of("data", m.getData().toString(), "descricao", m.getDescricao(),
+                        "valor", m.getValor(), "conta", m.getConta() == null ? "" : m.getConta()))
+                .toList();
+        return Map.of(
+                "removido", confirmar,
+                "contas", contasTeste.size(),
+                "nomesContas", contasTeste.stream().map(c -> c.getInstituicao() + " · " + c.getNome()).toList(),
+                "investimentos", investimentosTeste.size(),
+                "lancamentos", lancamentos.size(),
+                "amostraLancamentos", amostra);
+    }
 }

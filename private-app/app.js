@@ -677,6 +677,31 @@ $('#of-items').onclick = async event => {
     await refreshOfItems();
   }
 };
+/** Remove contas, investimentos e lançamentos fictícios do modo Sandbox depois de mostrar o que sai. */
+$('#clean-test-btn').onclick = async () => {
+  if (saving) return;
+  saving = true;
+  $('#clean-test-btn').disabled = true;
+  $('#of-error').textContent = '';
+  try {
+    const preview = await request('/open-finance/limpar-dados-teste', { method: 'POST' });
+    if (!preview.contas && !preview.investimentos && !preview.lancamentos) {
+      $('#of-info').textContent = 'Nenhum dado de teste encontrado.';
+      return;
+    }
+    const exemplos = preview.amostraLancamentos.slice(0, 5).map(item => `• ${item.descricao} (${money(item.valor)})`).join('\n');
+    const resumo = `Remover dados de teste?\n\n${preview.contas} conta(s)/cartão(ões)${preview.nomesContas.length ? `: ${preview.nomesContas.join(', ')}` : ''}\n${preview.investimentos} investimento(s)\n${preview.lancamentos} lançamento(s) fictício(s)${exemplos ? `\n${exemplos}` : ''}\n\nOs bancos vinculados e seus lançamentos reais não são afetados.`;
+    if (!confirm(resumo)) return;
+    const res = await request('/open-finance/limpar-dados-teste?confirmar=true', { method: 'POST' });
+    $('#of-info').textContent = `Removidos: ${res.contas} conta(s), ${res.investimentos} investimento(s) e ${res.lancamentos} lançamento(s) de teste.`;
+    try { await load(); } catch { /* status shows the error */ }
+  } catch (error) {
+    $('#of-error').textContent = error.message;
+  } finally {
+    saving = false;
+    $('#clean-test-btn').disabled = false;
+  }
+};
 $('#close-of').onclick = () => {
   if (!saving) $('#of-dialog').close();
 };
