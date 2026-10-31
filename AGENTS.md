@@ -12,6 +12,12 @@ Referências de produto: Pierre brasileiro (CloudWalk, pierre.finance) e MultiCa
 - Não declarar recursos prontos apenas porque existem botões. Verificar API, persistência e interface.
 - Preservar alterações locais anteriores do usuário; não incluir `.codex/`, `.github/` ou outros arquivos indiscriminadamente em commits.
 
+## Correção HTTP 410 nas transações Pluggy — 30/10/2026
+
+Primeiro uso real: os itens Nubank e Itaú falharam com "A Pluggy respondeu HTTP 410 em /transactions". Causa: o `GET /transactions` paginado (`page`/`pageSize`/`from`) foi descontinuado e responde 410 `ENDPOINT_DEPRECATED` para chaves novas, antes da data anunciada (31/12/2026). Corrigido: `PluggyService.consultarTransacoes` usa `GET /v2/transactions?accountId=&dateFrom=yyyy-mm-dd` e segue o cursor opaco `next` (query string pronta; `null` na última página; até 40 páginas). Erros da Pluggy passam a incluir `code`/`message` do corpo (ex.: "HTTP 410 em /transactions (ENDPOINT_DEPRECATED)"). `/investments` continua paginado por `page`. Stub de teste responde 410 na rota v1. 68 testes de backend aprovados. Ainda não confirmado com a API real.
+
+Avaliado e não adotado: "Banco MCP" (banco.mcp.ai): agregador sem operador, CNPJ ou termos de privacidade identificados na página; exige entregar consentimento Open Finance a terceiro desconhecido. Não integrar sem verificar a empresa.
+
 ## Entrega Meu Pluggy e correções da sincronização Pluggy — 30/10/2026
 
 Contexto: a Pluggy não aprovou produção para o titular. O caminho adotado é o **Meu Pluggy** (uso pessoal, gratuito, sem due diligence, até 5 conexões, dados reais; atualização a cada 24 h; autorização de 1 ano). O titular já conectou Nubank, Itaú e Santander e três cartões no meu.pluggy.ai. Passo a passo em `docs/meu-pluggy.md`.

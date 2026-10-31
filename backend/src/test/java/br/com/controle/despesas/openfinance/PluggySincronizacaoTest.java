@@ -51,11 +51,18 @@ class PluggySincronizacaoTest {
             server.createContext("/auth", ex -> responder(ex, 200, "{\"apiKey\":\"chave-stub\"}"));
             server.createContext("/accounts", ex -> responder(ex, statusContas, RESPOSTAS.getOrDefault("accounts", "{\"results\":[]}")));
             server.createContext("/investments", ex -> responder(ex, 200, RESPOSTAS.getOrDefault("investments", "{\"results\":[]}")));
-            server.createContext("/transactions", ex -> {
+            // Rota v1 descontinuada: a Pluggy responde 410 para chaves novas.
+            server.createContext("/transactions", ex -> responder(ex, 410,
+                    "{\"code\":\"ENDPOINT_DEPRECATED\",\"message\":\"Use GET /v2/transactions\"}"));
+            server.createContext("/v2/transactions", ex -> {
                 String query = ex.getRequestURI().getQuery();
                 String conta = query.substring(query.indexOf("accountId=") + 10).split("&")[0];
-                String pagina = query.contains("page=2") ? ":p2" : "";
-                responder(ex, 200, RESPOSTAS.getOrDefault("transactions:" + conta + pagina, "{\"results\":[]}"));
+                if (!query.contains("dateFrom=")) {
+                    responder(ex, 400, "{\"message\":\"dateFrom ausente\"}");
+                    return;
+                }
+                String pagina = query.contains("after=cursor-2") ? ":p2" : "";
+                responder(ex, 200, RESPOSTAS.getOrDefault("transactions:" + conta + pagina, "{\"results\":[],\"next\":null}"));
             });
             server.createContext("/items/", ex -> {
                 String corpo = RESPOSTAS.get("item");
@@ -308,8 +315,10 @@ class PluggySincronizacaoTest {
     }
 
     @Test void percorreTodasAsPaginasDeTransacoes() {
-        RESPOSTAS.put("transactions:acc-1", "{\"page\":1,\"totalPages\":2,\"results\":[" + tx("p1", "Mercado A", -5.00, "2026-10-10") + "]}");
-        RESPOSTAS.put("transactions:acc-1:p2", "{\"page\":2,\"totalPages\":2,\"results\":[" + tx("p2", "Mercado B", -6.00, "2026-10-10") + "]}");
+        // API v2: cursor opaco em "next" (query string pronta); null na ultima pagina.
+        RESPOSTAS.put("transactions:acc-1", "{\"results\":[" + tx("p1", "Mercado A", -5.00, "2026-10-10")
+                + "],\"next\":\"?accountId=acc-1&dateFrom=2026-08-01&after=cursor-2\"}");
+        RESPOSTAS.put("transactions:acc-1:p2", "{\"results\":[" + tx("p2", "Mercado B", -6.00, "2026-10-10") + "],\"next\":null}");
         assertEquals(2, sincronizar("item-real").get("transacoesImportadas"));
         assertTrue(movimentacoes.existsByIdExterno("pluggy:p2"));
     }
@@ -386,5 +395,14 @@ class PluggySincronizacaoTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"itemId\":\"item-real\"}"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.erro").value(org.hamcrest.Matchers.containsString("HTTP 500")));
+    }
+
+    @Test void erroDaPluggyIncluiCodigoDoCorpo() throws Exception {
+        statusContas = 410;
+        RESPOSTAS.put("accounts", "{\"code\":\"ENDPOINT_DEPRECATED\",\"message\":\"Gone\"}");
+        mvc.perform(post("/api/open-finance/sincronizar").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itemId\":\"item-real\"}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.erro").value(org.hamcrest.Matchers.containsString("HTTP 410 em /accounts (ENDPOINT_DEPRECATED)")));
     }
 }

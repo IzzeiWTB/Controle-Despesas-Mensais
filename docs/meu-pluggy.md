@@ -17,6 +17,7 @@ A Pluggy só libera bancos reais em produção com contrato comercial. Para uso 
 
 - **Primeira sincronização** de um item: lançamentos dos últimos 90 dias; nas seguintes, 35 dias (`pluggy.dias-primeira-sincronizacao` e `pluggy.dias-sincronizacao`). Itens vinculados ficam salvos na tabela `item_pluggy`.
 - **Automática**: ao abrir o app, itens sincronizados há mais de 6 horas são atualizados em segundo plano. O Meu Pluggy atualiza os dados dos bancos a cada 24 horas. Também há o botão **Sincronizar todos agora**.
+- **API de transações**: usa `GET /v2/transactions` (`dateFrom` + cursor `next`). O `GET /transactions` paginado foi descontinuado pela Pluggy e responde **410 ENDPOINT_DEPRECATED** para chaves novas.
 - **Sem duplicação**: cada transação usa o id da Pluggy (`pluggy:<id>`); lançamentos editados por você não são sobrescritos.
 - **Cartão**: compras entram como despesa (a Pluggy usa `type` DEBIT/CREDIT; sem ele, no cartão valor positivo é compra). Pagamentos de fatura e transferências entre contas do próprio titular (categoria Pluggy "Same person transfer", quando disponível) são ignorados para não contar o gasto duas vezes.
 - **Rótulo da conta**: "Nubank" para conta e "Nubank · cartão 1234" para cartão.

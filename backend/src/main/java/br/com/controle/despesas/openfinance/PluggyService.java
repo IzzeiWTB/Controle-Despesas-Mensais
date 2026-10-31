@@ -282,7 +282,15 @@ public class PluggyService {
                 .GET().build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new PluggyIndisponivelException("A Pluggy respondeu HTTP " + response.statusCode() + " em " + caminho.split("\\?")[0]);
+            String motivo = "";
+            try {
+                JsonNode erro = json.readTree(response.body());
+                motivo = primeiroPreenchido(erro.path("code").asText(""), erro.path("message").asText(""), "");
+            } catch (Exception ignorada) {
+                // corpo sem JSON: fica so o status
+            }
+            throw new PluggyIndisponivelException("A Pluggy respondeu HTTP " + response.statusCode() + " em " + caminho.split("\\?")[0]
+                    + (motivo.isBlank() ? "" : " (" + limitar(motivo, 80) + ")"));
         }
         return json.readTree(response.body());
     }
@@ -297,6 +305,28 @@ public class PluggyService {
             totalPaginas = raiz.path("totalPages").asInt(1);
             pagina++;
         } while (pagina <= totalPaginas && pagina <= MAXIMO_PAGINAS);
+        return resultados;
+    }
+
+    /**
+     * Transacoes pela API v2 (cursor). O GET /transactions paginado foi descontinuado pela Pluggy
+     * e responde 410 ENDPOINT_DEPRECATED para chaves novas. O campo "next" e a query string pronta
+     * da proxima pagina (opaca) ou null na ultima.
+     */
+    private List<JsonNode> consultarTransacoes(String apiKey, String accountId, LocalDate de) throws Exception {
+        final String endpoint = "/v2/transactions";
+        List<JsonNode> resultados = new ArrayList<>();
+        String caminho = endpoint + "?accountId=" + URLEncoder.encode(accountId, StandardCharsets.UTF_8) + "&dateFrom=" + de;
+        for (int pagina = 1; caminho != null && pagina <= MAXIMO_PAGINAS; pagina++) {
+            JsonNode raiz = consultarRaiz(apiKey, caminho);
+            raiz.path("results").forEach(resultados::add);
+            String next = raiz.path("next").isTextual() ? raiz.path("next").asText().trim() : "";
+            if (next.isEmpty()) caminho = null;
+            else if (next.startsWith("/")) caminho = next;
+            else if (next.startsWith("?")) caminho = endpoint + next;
+            else if (next.startsWith("http")) caminho = URI.create(next).getRawPath() + "?" + URI.create(next).getRawQuery();
+            else caminho = endpoint + "?" + next;
+        }
         return resultados;
     }
 
@@ -343,8 +373,7 @@ public class PluggyService {
         List<TransacaoPluggy> transacoes = new ArrayList<>();
         int ignoradas = 0;
         for (ContaPluggy conta : contas) {
-            String caminho = "/transactions?accountId=" + URLEncoder.encode(conta.id(), StandardCharsets.UTF_8) + "&from=" + de;
-            for (JsonNode tx : consultarTodas(apiKey, caminho)) {
+            for (JsonNode tx : consultarTransacoes(apiKey, conta.id(), de)) {
                 TransacaoPluggy t = lerTransacao(tx, conta.credito(), conta.rotulo(), clock.getZone());
                 if (t == null) ignoradas++;
                 else transacoes.add(t);
