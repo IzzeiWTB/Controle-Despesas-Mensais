@@ -25,6 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 @Service
@@ -34,6 +36,8 @@ public class PluggyService {
     private static final Pattern ITEM_ID_VALIDO = Pattern.compile("[A-Za-z0-9_-]{8,100}");
     private static final int MAXIMO_PAGINAS = 40;
     private static final Duration INTERVALO_SINCRONIZACAO_AUTOMATICA = Duration.ofHours(6);
+    private static final Duration ESPERA_SINCRONIZACAO_EM_ANDAMENTO = Duration.ofMinutes(3);
+    private final java.util.concurrent.ConcurrentMap<String, ReentrantLock> travasPorItem = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Value("${pluggy.client.id:${PLUGGY_CLIENT_ID:}}")
     private String clientId;
@@ -97,7 +101,13 @@ public class PluggyService {
 
     private static String limitar(String texto, int maximo) {
         if (texto == null) return "";
+        texto = limpar(texto);
         return texto.length() > maximo ? texto.substring(0, maximo) : texto;
+    }
+
+    /** Remove caracteres de controle (o PostgreSQL rejeita \u0000 em texto) que alguns bancos mandam na descricao. */
+    static String limpar(String texto) {
+        return texto == null ? "" : texto.replaceAll("\\p{Cntrl}", " ");
     }
 
     static boolean ehItemSimulado(String itemId) {
@@ -198,10 +208,23 @@ public class PluggyService {
     public Map<String, Object> sincronizarRegistrandoErro(String itemId) {
         try {
             return sincronizarItem(itemId);
-        } catch (PluggyIndisponivelException | DataAccessException e) {
-            registrarErro(itemId, e instanceof PluggyIndisponivelException ? e.getMessage() : "Erro ao gravar os dados sincronizados.");
+        } catch (RuntimeException e) {
+            registrarErro(itemId, mensagemErro(e));
             throw e;
         }
+    }
+
+    /**
+     * Mensagem exibida no item: erros da Pluggy como vieram; falhas de gravacao com a causa mais especifica
+     * (primeira linha, sem o "Detail" do PostgreSQL), para diagnosticar sem acesso aos logs.
+     */
+    static String mensagemErro(RuntimeException e) {
+        if (e instanceof PluggyIndisponivelException || e instanceof IllegalArgumentException) return limitar(e.getMessage(), 255);
+        log.warn("Falha ao gravar sincronizacao Pluggy", e);
+        Throwable causa = org.springframework.core.NestedExceptionUtils.getMostSpecificCause(e);
+        String detalhe = causa.getMessage() == null ? causa.getClass().getSimpleName()
+                : causa.getMessage().lines().findFirst().orElse("").trim();
+        return limitar("Erro ao gravar os dados sincronizados: " + detalhe, 255);
     }
 
     /**
@@ -224,10 +247,10 @@ public class PluggyService {
                 sincronizados++;
                 linha.put("ok", true);
                 linha.put("transacoesImportadas", importadas);
-            } catch (PluggyIndisponivelException | DataAccessException e) {
+            } catch (RuntimeException e) {
                 falhas++;
                 linha.put("ok", false);
-                linha.put("erro", e instanceof PluggyIndisponivelException ? e.getMessage() : "Erro ao gravar os dados sincronizados.");
+                linha.put("erro", itemRepository.findById(item.getItemId()).map(ItemPluggy::getUltimoErro).orElseGet(() -> mensagemErro(e)));
             }
             resultados.add(linha);
         }
@@ -261,7 +284,16 @@ public class PluggyService {
         if (!isConfigurado()) {
             throw new PluggyIndisponivelException("Credenciais da Pluggy não configuradas; só o item de simulação (sandbox) pode ser sincronizado.");
         }
+        // Uma sincronizacao por item de cada vez: a automatica (ao abrir o app) e o botao "Sincronizar todos"
+        // gravariam as mesmas transacoes em paralelo e a segunda violaria o UNIQUE de id_externo.
+        // A segunda espera a primeira e encontra tudo ja importado.
+        ReentrantLock trava = travasPorItem.computeIfAbsent(idFinal, k -> new ReentrantLock());
+        boolean travado = false;
         try {
+            travado = trava.tryLock(ESPERA_SINCRONIZACAO_EM_ANDAMENTO.toSeconds(), TimeUnit.SECONDS);
+            if (!travado) {
+                throw new PluggyIndisponivelException("Este banco já está sendo sincronizado; tente de novo em instantes.");
+            }
             return sincronizarComPluggyReal(idFinal);
         } catch (PluggyIndisponivelException | DataAccessException e) {
             throw e;
@@ -271,6 +303,8 @@ public class PluggyService {
         } catch (Exception e) {
             log.warn("Erro ao sincronizar via API do Pluggy: {}", e.getMessage());
             throw new PluggyIndisponivelException("Falha ao sincronizar com a Pluggy: " + e.getMessage(), e);
+        } finally {
+            if (travado) trava.unlock();
         }
     }
 
@@ -357,10 +391,12 @@ public class PluggyService {
                 contasJson.path(0).path("connector").path("name").asText(""),
                 "Banco");
 
+        // Ids repetidos na resposta violariam o UNIQUE (item_id, id_externo); fica o primeiro.
+        Set<String> contasLidas = new HashSet<>();
         List<ContaPluggy> contas = new ArrayList<>();
         for (JsonNode acc : contasJson) {
             String id = acc.path("id").asText("");
-            if (id.isBlank()) continue;
+            if (id.isBlank() || !contasLidas.add(id)) continue;
             boolean credito = "CREDIT".equalsIgnoreCase(acc.path("type").asText("BANK"));
             String nome = primeiroPreenchido(acc.path("marketingName").asText(""), acc.path("name").asText(""), "Conta");
             BigDecimal balance = moeda(acc.path("balance").asDouble(0.0));
@@ -380,11 +416,13 @@ public class PluggyService {
             }
         }
 
+        Set<String> investimentosLidos = new HashSet<>();
         List<InvestimentoPluggy> investimentos = new ArrayList<>();
         for (JsonNode inv : consultarTodas(apiKey, "/investments?itemId=" + itemParam)) {
             String id = inv.path("id").asText("");
             double saldo = inv.path("balance").asDouble(0.0);
-            if (id.isBlank() || saldo == 0.0 || "TOTAL_WITHDRAWAL".equalsIgnoreCase(inv.path("status").asText(""))) continue;
+            if (id.isBlank() || moeda(saldo).signum() <= 0 || !investimentosLidos.add(id)
+                    || "TOTAL_WITHDRAWAL".equalsIgnoreCase(inv.path("status").asText(""))) continue;
             JsonNode inst = inv.path("institution");
             investimentos.add(new InvestimentoPluggy(id,
                     limitar(primeiroPreenchido(inst.isObject() ? inst.path("name").asText("") : inst.asText(""), instituicao), 80),
@@ -553,7 +591,7 @@ public class PluggyService {
     }
 
     private static String primeiroPreenchido(String... valores) {
-        for (String v : valores) if (v != null && !v.isBlank()) return v.trim();
+        for (String v : valores) if (v != null && !limpar(v).isBlank()) return limpar(v).trim();
         return "";
     }
 
@@ -639,7 +677,7 @@ public class PluggyService {
             m.setDescricao(desc);
             m.setValor(valor);
             m.setData(data);
-            m.setCategoria(categoria);
+            m.setCategoria(categoria == null || categoria.isBlank() ? "Outros" : limitar(categoria, 60));
             m.setTipo(tipo);
             m.setConta(limitar(conta, 60));
             m.setRecorrente(false);

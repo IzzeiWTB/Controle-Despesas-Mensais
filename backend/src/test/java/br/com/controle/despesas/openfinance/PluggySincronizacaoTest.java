@@ -397,6 +397,36 @@ class PluggySincronizacaoTest {
                 .andExpect(jsonPath("$.erro").value(org.hamcrest.Matchers.containsString("HTTP 500")));
     }
 
+    @Test void sincronizacoesSimultaneasDoMesmoItemNaoFalhamNemDuplicam() throws Exception {
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(3);
+        try {
+            var tarefas = java.util.List.<java.util.concurrent.Callable<Map<String, Object>>>of(
+                    () -> service.sincronizarItem("item-real"),
+                    () -> service.sincronizarItem("item-real"),
+                    () -> service.sincronizarItem("item-real"));
+            int importadas = 0;
+            for (var f : pool.invokeAll(tarefas)) importadas += (int) f.get().get("transacoesImportadas");
+            assertEquals(2, importadas);
+            assertEquals(2, movimentacoes.count());
+            assertEquals(2, contas.count());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test void mensagemDeFalhaNaGravacaoMostraACausaSemODetalhe() {
+        var causa = new java.sql.SQLException("ERROR: duplicate key value violates unique constraint \"uk_movimentacao_id_externo\"\n  Detail: Key (id_externo)=(pluggy:x) already exists.");
+        String msg = PluggyService.mensagemErro(new org.springframework.dao.DataIntegrityViolationException("could not execute statement", causa));
+        assertTrue(msg.startsWith("Erro ao gravar os dados sincronizados: ERROR: duplicate key"), msg);
+        assertTrue(!msg.contains("Detail"), msg);
+    }
+
+    @Test void caracteresDeControleSaoRemovidosDaDescricao() {
+        definir("transactions:acc-1", tx("z1", "Mercado\\u0000 Bom", -7.00, "2026-10-10"));
+        sincronizar("item-real");
+        assertEquals("SAIDA", porDescricao("Mercado  Bom").getTipo());
+    }
+
     @Test void erroDaPluggyIncluiCodigoDoCorpo() throws Exception {
         statusContas = 410;
         RESPOSTAS.put("accounts", "{\"code\":\"ENDPOINT_DEPRECATED\",\"message\":\"Gone\"}");
